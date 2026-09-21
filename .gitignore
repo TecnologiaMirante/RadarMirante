@@ -1,0 +1,56 @@
+# ── Dependências ──────────────────────────────────────────────────────────────
+node_modules/
+functions/node_modules/
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+dist/
+functions/lib/
+
+# ── Variáveis de ambiente (nunca commitar valores reais) ──────────────────────
+.env
+.env.local
+.env.*.local
+functions/.env
+
+# ── Firebase ──────────────────────────────────────────────────────────────────
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# ── Service account keys (nunca commitar) ─────────────────────────────────────
+scripts/serviceAccountKey.json
+*serviceAccountKey*.json
+*service-account*.json
+*.key.json
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+.claude/
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+cls
+curl
+*.tmp

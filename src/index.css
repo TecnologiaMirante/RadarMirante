@@ -1,0 +1,187 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark theme (editorial — padrão) */
+    --background: 224 20% 7%;
+    --foreground: 210 20% 92%;
+
+    --card: 224 18% 10%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 224 18% 10%;
+    --popover-foreground: 210 20% 92%;
+
+    --primary: 210 100% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 224 16% 16%;
+    --secondary-foreground: 210 20% 85%;
+
+    --muted: 224 14% 14%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 224 16% 18%;
+    --accent-foreground: 210 20% 92%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 224 14% 16%;
+    --input: 224 14% 16%;
+    --ring: 210 100% 56%;
+
+    --radius: 0.5rem;
+
+    /* Radar-specific tokens */
+    --score-critical: 0 90% 60%;
+    --score-high: 25 95% 53%;
+    --score-medium: 45 93% 47%;
+    --score-low: 142 71% 45%;
+  }
+
+  /* Light override — mantido para futura opção */
+  .light {
+    --background: 0 0% 98%;
+    --foreground: 224 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 20% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 20% 10%;
+    --primary: 210 100% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 10% 94%;
+    --secondary-foreground: 224 20% 20%;
+    --muted: 210 10% 94%;
+    --muted-foreground: 215 15% 45%;
+    --accent: 210 10% 92%;
+    --accent-foreground: 224 20% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 14% 88%;
+    --input: 214 14% 88%;
+    --ring: 210 100% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Scrollbar estilizado */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}
+
+/* ── Trending / Repercutindo ─────────────────────────────────────────────────
+   Cores e animações adaptadas para ambos os temas.
+   Modo escuro (padrão): vermelho suave / glow.
+   Modo claro: vermelho forte (red-700) para garantir contraste em fundo branco.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --trending-text:       #f87171;           /* red-400 */
+  --trending-text-strong:#ef4444;           /* red-500 */
+  --trending-bg:         rgba(239,68,68,.04);
+  --trending-bg-hover:   rgba(239,68,68,.08);
+  --trending-border:     rgba(239,68,68,.45);
+  --trending-border-peak:rgba(239,68,68,.9);
+  --trending-glow:       rgba(239,68,68,.14);
+  --candidate-text:      #60a5fa;           /* blue-400 */
+}
+
+.light {
+  --trending-text:       #b91c1c;           /* red-700 — alto contraste no branco */
+  --trending-text-strong:#991b1b;           /* red-800 */
+  --trending-bg:         rgba(220,38,38,.07);
+  --trending-bg-hover:   rgba(220,38,38,.13);
+  --trending-border:     rgba(220,38,38,.55);
+  --trending-border-peak:rgba(220,38,38,1);
+  --trending-glow:       rgba(220,38,38,.20);
+  --candidate-text:      #1d4ed8;           /* blue-700 */
+}
+
+/* Classes semânticas de cor — usadas nos componentes */
+.trending-text  { color: var(--trending-text) !important; }
+.trending-bg    { background-color: var(--trending-bg); }
+.candidate-text { color: var(--candidate-text) !important; }
+
+@keyframes alert-pulse {
+  0%, 100% {
+    box-shadow: none;
+    border-color: var(--trending-border);
+  }
+  50% {
+    box-shadow: 0 0 0 5px var(--trending-glow);
+    border-color: var(--trending-border-peak);
+  }
+}
+
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.15; }
+}
+
+.card-trending-alert {
+  animation: alert-pulse 1.8s ease-in-out infinite;
+}
+.dot-blink {
+  animation: dot-blink 1s ease-in-out infinite;
+}
+
+/* Linha de post trending em modo claro: fundo mais marcado */
+.trending-row {
+  background-color: var(--trending-bg);
+}
+.trending-row:hover {
+  background-color: var(--trending-bg-hover);
+}
+
+/* Score badge gradients */
+@layer utilities {
+  .score-critical {
+    @apply bg-red-500/10 text-red-400 border-red-500/20;
+  }
+
+  .score-high {
+    @apply bg-orange-500/10 text-orange-400 border-orange-500/20;
+  }
+
+  .score-medium {
+    @apply bg-yellow-500/10 text-yellow-400 border-yellow-500/20;
+  }
+
+  .score-low {
+    @apply bg-green-500/10 text-green-400 border-green-500/20;
+  }
+
+  .trend-up {
+    @apply text-red-400;
+  }
+
+  .trend-neutral {
+    @apply text-muted-foreground;
+  }
+}

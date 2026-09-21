@@ -1,0 +1,164 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verifica domínio diretamente no token JWT do Firebase Auth.
+    // Não depende de nenhum documento Firestore nem de Cloud Function deployada.
+    // request.auth.token.email é preenchido pelo Google Sign-In.
+    function isMiranteUser() {
+      return isAuthenticated() &&
+        request.auth.token.email != null &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email.matches('.*@mirante[.]com[.]br');
+    }
+
+    function isCurrentUserAdmin() {
+      return isMiranteUser() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // ─── Users ────────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      allow read: if isMiranteUser();
+      // Admins podem promover/rebaixar outros; ninguém altera o próprio status
+      allow update: if isCurrentUserAdmin() &&
+        userId != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAdmin']);
+      allow create, delete: if false;
+    }
+
+    // ─── Posts ────────────────────────────────────────────────────────────────
+
+    match /posts/{postId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+
+      match /comments/{commentId} {
+        allow read: if isMiranteUser();
+        allow write: if false;
+      }
+
+      match /snapshots/{snapshotId} {
+        allow read: if isMiranteUser();
+        allow write: if false;
+      }
+    }
+
+    // Permite collectionGroup('comments') e collectionGroup('snapshots')
+    // sem esta regra wildcard queries de collection group são negadas
+    match /{path=**}/comments/{commentId} {
+      allow read: if isMiranteUser();
+    }
+    match /{path=**}/snapshots/{snapshotId} {
+      allow read: if isMiranteUser();
+    }
+
+    // ─── Opportunities ────────────────────────────────────────────────────────
+
+    match /opportunities/{opportunityId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Topics ───────────────────────────────────────────────────────────────
+
+    match /topics/{topicId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Analysis Runs ────────────────────────────────────────────────────────
+
+    match /analysisRuns/{runId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Platform Configs ─────────────────────────────────────────────────────
+
+    match /platformConfigs/{configId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Baseline ─────────────────────────────────────────────────────────────
+
+    match /baseline/{baselineId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Analysis Requests ────────────────────────────────────────────────────
+
+    match /analysisRequests/{requestId} {
+      allow read: if isMiranteUser() && resource.data.requestedBy == request.auth.uid;
+      allow create: if isMiranteUser() &&
+        request.resource.data.requestedBy == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.keys().hasAll(['postId', 'requestedBy', 'status', 'createdAt']);
+      allow update, delete: if false;
+    }
+
+    // ─── Credentials (Cofre de Acessos) ──────────────────────────────────────
+
+    match /credentials/{credentialId} {
+      function canReadCredential() {
+        return isMiranteUser() && (
+          resource.data.visibleTo == 'all' ||
+          resource.data.visibleTo.hasAny([request.auth.uid])
+        )
+      }
+      function isCredentialAdmin() {
+        return isCurrentUserAdmin()
+      }
+      allow read: if canReadCredential()
+      allow create: if isCredentialAdmin() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.keys().hasAll(['name', 'platform', 'loginType', 'visibleTo', 'createdBy', 'createdAt', 'updatedAt'])
+      allow update: if isCredentialAdmin()
+      allow delete: if isCredentialAdmin()
+    }
+
+    // ─── Instagram Insights ───────────────────────────────────────────────────
+
+    match /instagramAccount/{docId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    match /instagramInsights/{docId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    match /instagramOnlineFollowers/{docId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    match /instagramAudience/{docId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Editorial Feedback ───────────────────────────────────────────────────
+
+    match /editorialFeedback/{feedbackId} {
+      allow read: if isMiranteUser();
+      allow create: if isMiranteUser() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.keys().hasAll([
+          'opportunityId', 'userId', 'useful', 'createdAt'
+        ]) &&
+        request.resource.data.useful is bool;
+      allow update, delete: if false;
+    }
+  }
+}
