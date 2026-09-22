@@ -2,7 +2,7 @@
 // Implementação completa na ETAPA 7.
 
 export const EDITORIAL_RADAR_SYSTEM_PROMPT = `
-Você é o motor de inteligência editorial do Radar iMirante.
+Você é o motor de inteligência editorial do Mirante Radar.
 
 Sua função NÃO é escrever notícias.
 

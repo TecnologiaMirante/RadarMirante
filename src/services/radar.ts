@@ -10,6 +10,7 @@ import {
   orderBy,
   limit,
   addDoc,
+  updateDoc,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore'
@@ -47,13 +48,22 @@ export async function getPosts(filters: RadarFilters, account: RadarAccount = 'i
 
   let items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as RadarPost))
 
-  const cutoff = TIME_CUTOFFS[filters.time]
-  if (cutoff !== null && cutoff !== undefined) {
-    const since = Date.now() - cutoff
+  if (filters.time === 'custom') {
+    const from = filters.customFrom ?? 0
+    const to = filters.customTo ?? Date.now()
     items = items.filter((p) => {
-      const ts = p.publishedAt as unknown as Timestamp
-      return ts?.toMillis ? ts.toMillis() >= since : true
+      const ms = (p.publishedAt as unknown as Timestamp)?.toMillis?.() ?? 0
+      return ms >= from && ms <= to
     })
+  } else {
+    const cutoff = TIME_CUTOFFS[filters.time]
+    if (cutoff !== null && cutoff !== undefined) {
+      const since = Date.now() - cutoff
+      items = items.filter((p) => {
+        const ts = p.publishedAt as unknown as Timestamp
+        return ts?.toMillis ? ts.toMillis() >= since : true
+      })
+    }
   }
 
   return sortPosts(items, filters.sort)
@@ -104,13 +114,22 @@ export async function getOpportunities(filters: RadarFilters): Promise<Opportuni
 
   let items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Opportunity))
 
-  const cutoff = TIME_CUTOFFS[filters.time]
-  if (cutoff !== null && cutoff !== undefined) {
-    const since = Date.now() - cutoff
+  if (filters.time === 'custom') {
+    const from = filters.customFrom ?? 0
+    const to = filters.customTo ?? Date.now()
     items = items.filter((o) => {
-      const ts = o.createdAt as unknown as Timestamp
-      return ts?.toMillis ? ts.toMillis() >= since : true
+      const ms = (o.createdAt as unknown as Timestamp)?.toMillis?.() ?? 0
+      return ms >= from && ms <= to
     })
+  } else {
+    const cutoff = TIME_CUTOFFS[filters.time]
+    if (cutoff !== null && cutoff !== undefined) {
+      const since = Date.now() - cutoff
+      items = items.filter((o) => {
+        const ts = o.createdAt as unknown as Timestamp
+        return ts?.toMillis ? ts.toMillis() >= since : true
+      })
+    }
   }
 
   items = sortOpportunities(items, filters.sort)
@@ -172,12 +191,14 @@ export async function getPostComments(postId: string, maxItems = 50): Promise<im
   )
 }
 
-export async function getRecentCommentTexts(sinceMs: number, maxItems = 2000): Promise<string[]> {
+export async function getRecentCommentTexts(sinceMs: number, toMs?: number, maxItems = 2000): Promise<string[]> {
   const filterAndMap = (docs: import('firebase/firestore').QueryDocumentSnapshot[]) =>
     docs
       .filter((d) => {
         const ts = d.data().publishedAt as { toMillis?: () => number } | undefined
-        return ts?.toMillis ? ts.toMillis() >= sinceMs : false
+        if (!ts?.toMillis) return false
+        const ms = ts.toMillis()
+        return ms >= sinceMs && (toMs === undefined || ms <= toMs)
       })
       .map((d) => (d.data().text as string) ?? '')
       .filter(Boolean)
@@ -257,6 +278,15 @@ export function triggerPostAnalysis(postId: string): Promise<{ opportunityId: st
       }
     })
   })
+}
+
+// ─── Opportunity status update ────────────────────────────────────────────────
+
+export async function updateOpportunityStatus(
+  id: string,
+  status: import('@/types/radar').OpportunityStatus,
+): Promise<void> {
+  await updateDoc(doc(db, 'opportunities', id), { status, updatedAt: serverTimestamp() })
 }
 
 // ─── Editorial Feedback ───────────────────────────────────────────────────────

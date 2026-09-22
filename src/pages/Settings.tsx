@@ -8,7 +8,7 @@ import { CredentialVault } from '@/components/credentials/CredentialVault'
 import { AdminPanel } from '@/components/admin/AdminPanel'
 
 export default function Settings() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, role } = useAuth()
 
   return (
     <div className="space-y-6">
@@ -40,8 +40,8 @@ export default function Settings() {
                   <p className="text-sm font-semibold text-foreground leading-none">{user?.displayName || 'Usuário'}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
                   {isAdmin && (
-                    <span className="inline-block mt-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 leading-none">
-                      Admin
+                    <span className={`inline-block mt-1 text-[10px] font-semibold rounded px-1.5 py-0.5 leading-none border ${role === 'superadmin' ? 'text-yellow-600 bg-yellow-500/10 border-yellow-500/30' : 'text-primary bg-primary/10 border-primary/20'}`}>
+                      {role === 'superadmin' ? 'Super Admin' : 'Admin'}
                     </span>
                   )}
                 </div>

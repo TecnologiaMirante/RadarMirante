@@ -1,32 +1,21 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Activity, MessageCircle, Heart, TrendingUp, FileText,
-  Zap, BarChart2, Award, Eye, Clock, Calendar, ChevronDown,
+  Zap, BarChart2, Award, Eye, Clock,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { WordCloud } from '@/components/radar/WordCloud'
 import { ActivityChart } from '@/components/radar/ActivityChart'
 import { InfoTip } from '@/components/ui/InfoTip'
-import { getPosts, getRecentCommentTexts } from '@/services/radar'
+import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
+import { useTimeFilter } from '@/hooks/useTimeFilter'
+import { getPosts, getPostComments } from '@/services/radar'
 import { cn } from '@/lib/utils'
 import type { Timestamp } from 'firebase/firestore'
-import type { RadarPost, TimeFilter } from '@/types/radar'
+import type { RadarPost } from '@/types/radar'
 import { Link } from 'react-router-dom'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-const TIME_FILTERS: { value: TimeFilter; label: string; short: string; group: string }[] = [
-  { value: 'now', label: 'Última hora',    short: '1h',   group: 'Recente' },
-  { value: '3h',  label: 'Últimas 3h',     short: '3h',   group: 'Recente' },
-  { value: '6h',  label: 'Últimas 6h',     short: '6h',   group: 'Recente' },
-  { value: '24h', label: 'Últimas 24h',    short: '24h',  group: 'Hoje' },
-  { value: '2d',  label: 'Últimos 2 dias', short: '2d',   group: 'Período' },
-  { value: '3d',  label: 'Últimos 3 dias', short: '3d',   group: 'Período' },
-  { value: '7d',  label: 'Últimos 7 dias', short: '7d',   group: 'Período' },
-  { value: '15d', label: '15 dias',        short: '15d',  group: 'Período' },
-  { value: '30d', label: '30 dias',        short: '30d',  group: 'Período' },
-  { value: 'all', label: 'Desde 15/09',    short: '15/09', group: 'Histórico' },
-]
 
 const TIME_MS: Record<string, number | null> = {
   now:  1  * 60 * 60 * 1000,
@@ -39,72 +28,6 @@ const TIME_MS: Record<string, number | null> = {
   '15d': 15 * 24 * 60 * 60 * 1000,
   '30d': 30 * 24 * 60 * 60 * 1000,
   all:  null,
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function DateDropdown({ value, onChange }: { value: TimeFilter; onChange: (v: TimeFilter) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const current = TIME_FILTERS.find(f => f.value === value) ?? TIME_FILTERS[3]
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  const groups = Array.from(new Set(TIME_FILTERS.map(f => f.group)))
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={cn(
-          'flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium transition-all',
-          open
-            ? 'bg-primary/10 border-primary/40 text-primary'
-            : 'bg-card border-border text-muted-foreground hover:border-border/80 hover:text-foreground',
-        )}
-      >
-        <Calendar className="w-3 h-3 opacity-70" />
-        <span>{current.label}</span>
-        <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden py-1.5">
-          {groups.map(group => (
-            <div key={group}>
-              <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-3 pt-2 pb-1">
-                {group}
-              </p>
-              {TIME_FILTERS.filter(f => f.group === group).map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => { onChange(f.value); setOpen(false) }}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-1.5 text-sm transition-colors',
-                    f.value === value
-                      ? 'bg-primary/10 text-primary font-semibold'
-                      : 'text-foreground/80 hover:bg-accent hover:text-foreground',
-                  )}
-                >
-                  <span>{f.label}</span>
-                  {f.value === value && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function StatCard({
@@ -210,7 +133,7 @@ function TopPostRow({ post, rank }: { post: RadarPost; rank: number }) {
 export default function Dashboard() {
   const [allPosts, setAllPosts] = useState<RadarPost[]>([])
   const [loading, setLoading] = useState(true)
-  const [displayTime, setDisplayTime] = useState<TimeFilter>('2d')
+  const { time: displayTime, customFrom, customTo, set: setDisplayTime } = useTimeFilter()
   const [commentTexts, setCommentTexts] = useState<string[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
 
@@ -222,17 +145,15 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    const cutoff = TIME_MS[displayTime]
-    const sinceMs = cutoff !== null ? Date.now() - cutoff : 0
-    setCloudLoading(true)
-    getRecentCommentTexts(sinceMs)
-      .then(setCommentTexts)
-      .catch(console.error)
-      .finally(() => setCloudLoading(false))
-  }, [displayTime])
-
   const posts = useMemo(() => {
+    if (displayTime === 'custom') {
+      const from = customFrom ?? 0
+      const to = customTo ?? Date.now()
+      return allPosts.filter(p => {
+        const ms = (p.publishedAt as unknown as Timestamp).toMillis()
+        return ms >= from && ms <= to
+      })
+    }
     const cutoff = TIME_MS[displayTime]
     if (cutoff === null) return allPosts
     const since = Date.now() - cutoff
@@ -240,7 +161,19 @@ export default function Dashboard() {
       const ts = p.publishedAt as unknown as Timestamp
       return ts.toMillis() >= since
     })
-  }, [allPosts, displayTime])
+  }, [allPosts, displayTime, customFrom, customTo])
+
+  useEffect(() => {
+    if (posts.length === 0) { setCommentTexts([]); return }
+    setCloudLoading(true)
+    const topPosts = [...posts]
+      .sort((a, b) => b.metrics.comments - a.metrics.comments)
+      .slice(0, 25)
+    Promise.all(topPosts.map(p => getPostComments(p.id, 100)))
+      .then(results => setCommentTexts(results.flat().map(c => c.text).filter(Boolean)))
+      .catch(console.error)
+      .finally(() => setCloudLoading(false))
+  }, [posts])
 
   const trendingPosts  = useMemo(() => posts.filter(p => p.status === 'trending'),   [posts])
   const candidatePosts = useMemo(() => posts.filter(p => p.status === 'candidate'),  [posts])
@@ -303,7 +236,7 @@ export default function Dashboard() {
     }
   }, [posts])
 
-  const timeLabel = TIME_FILTERS.find(f => f.value === displayTime)?.label ?? displayTime
+  const timeLabel = getPresetLabel(displayTime, customFrom, customTo)
 
   return (
     <div className="space-y-6">
@@ -323,7 +256,12 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
-        <DateDropdown value={displayTime} onChange={setDisplayTime} />
+        <DateDropdown
+          value={displayTime}
+          customFrom={customFrom}
+          customTo={customTo}
+          onChange={(time, from, to) => setDisplayTime(time, from, to)}
+        />
       </div>
 
       {/* KPI grid */}
@@ -384,7 +322,7 @@ export default function Dashboard() {
       {/* Activity chart */}
       <Card className="border-border/60">
         <CardContent className="p-5">
-          <SectionTitle title="Engajamento por hora" sub={`· ${timeLabel.toLowerCase()}`} />
+          <SectionTitle title="Publicações no período" sub={`· ${timeLabel.toLowerCase()}`} />
           <ActivityChart posts={posts} loading={loading} timeFilter={displayTime} />
         </CardContent>
       </Card>

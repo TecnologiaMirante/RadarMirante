@@ -300,7 +300,7 @@ export function InstagramPageFull() {
                 </a>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{profile?.name ?? 'Mirante'}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{profile?.name ?? 'Imirante'}</p>
             {profile?.biography && (
               <p className="text-[11px] text-muted-foreground/70 mt-1 max-w-sm line-clamp-2">{profile.biography}</p>
             )}

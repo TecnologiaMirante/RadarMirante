@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Radio, RefreshCw, MessageCircle, LayoutGrid, List,
-  TrendingUp, FileText, Activity, Search, X, ChevronDown,
-  Heart, Eye, Zap, Award, Clock, ArrowUpRight, Calendar, Maximize2,
+  TrendingUp, FileText, Activity, Search, X,
+  Heart, Eye, Zap, Award, Clock, ArrowUpRight, Maximize2,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -20,26 +20,13 @@ import { InfoTip } from '@/components/ui/InfoTip'
 import { useRadar } from '@/hooks/useRadar'
 import { useAccount, ACCOUNT_COLORS, ACCOUNT_PAGE_TITLES } from '@/contexts/AccountContext'
 import { getRecentCommentTexts } from '@/services/radar'
-import type { TimeFilter, SortOption, RadarPost } from '@/types/radar'
+import type { SortOption, RadarPost } from '@/types/radar'
+import { DateDropdown, TIME_FILTER_PRESETS } from '@/components/ui/DateDropdown'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-
-const TIME_FILTERS: { value: TimeFilter; label: string; short: string; group: string }[] = [
-  { value: 'now', label: 'Última hora',    short: '1h',   group: 'Recente' },
-  { value: '3h',  label: 'Últimas 3h',     short: '3h',   group: 'Recente' },
-  { value: '6h',  label: 'Últimas 6h',     short: '6h',   group: 'Recente' },
-  { value: '24h', label: 'Últimas 24h',    short: '24h',  group: 'Hoje' },
-  { value: '2d',  label: 'Últimos 2 dias', short: '2d',   group: 'Período' },
-  { value: '3d',  label: 'Últimos 3 dias', short: '3d',   group: 'Período' },
-  { value: '7d',  label: 'Últimos 7 dias', short: '7d',   group: 'Período' },
-  { value: '15d', label: '15 dias',        short: '15d',  group: 'Período' },
-  { value: '30d', label: '30 dias',        short: '30d',  group: 'Período' },
-  { value: 'all', label: 'Desde 15/09',    short: '15/09', group: 'Histórico' },
-]
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'recent',   label: 'Mais recentes' },
@@ -175,72 +162,6 @@ function StatRow({ icon, label, value, accent }: {
         <span className="opacity-60">{icon}</span>{label}
       </span>
       <span className={cn('text-xs font-bold tabular-nums', accent ?? 'text-foreground')}>{value}</span>
-    </div>
-  )
-}
-
-// ─── DateDropdown ─────────────────────────────────────────────────────────────
-
-function DateDropdown({ value, onChange }: { value: TimeFilter; onChange: (v: TimeFilter) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const current = TIME_FILTERS.find(f => f.value === value) ?? TIME_FILTERS[8]
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  const groups = Array.from(new Set(TIME_FILTERS.map(f => f.group)))
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={cn(
-          'flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium transition-all',
-          open
-            ? 'bg-primary/10 border-primary/40 text-primary'
-            : 'bg-card border-border text-muted-foreground hover:border-border/80 hover:text-foreground',
-        )}
-      >
-        <Calendar className="w-3 h-3 opacity-70" />
-        <span>{current.label}</span>
-        <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden py-1.5">
-          {groups.map(group => (
-            <div key={group}>
-              <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-3 pt-2 pb-1">
-                {group}
-              </p>
-              {TIME_FILTERS.filter(f => f.group === group).map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => { onChange(f.value); setOpen(false) }}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-1.5 text-sm transition-colors',
-                    f.value === value
-                      ? 'bg-primary/10 text-primary font-semibold'
-                      : 'text-foreground/80 hover:bg-accent hover:text-foreground',
-                  )}
-                >
-                  <span>{f.label}</span>
-                  {f.value === value && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -472,16 +393,20 @@ export default function Radar() {
             <h1 className="text-xl font-bold text-foreground leading-none">{pageTitle}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {loading ? 'Carregando…' : (() => {
-              const label = TIME_FILTERS.find(f => f.value === filters.time)?.label ?? filters.time
-              return `${posts.length} publicações · ${label.toLowerCase()}`
-            })()}
+                const label = filters.time === 'custom'
+                  ? 'período personalizado'
+                  : (TIME_FILTER_PRESETS.find(f => f.value === filters.time)?.label ?? filters.time).toLowerCase()
+                return `${posts.length} publicações · ${label}`
+              })()}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <DateDropdown
             value={filters.time}
-            onChange={v => setFilters(f => ({ ...f, time: v }))}
+            customFrom={filters.customFrom}
+            customTo={filters.customTo}
+            onChange={(time, from, to) => setFilters(f => ({ ...f, time, customFrom: from, customTo: to }))}
           />
           <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading} className="gap-1.5 h-8 text-xs">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
@@ -538,7 +463,7 @@ export default function Radar() {
         <div className="border-t border-border/40 px-5 pt-3">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest flex items-center gap-1.5">
-              <Zap className="w-3 h-3" /> Engajamento por hora · hoje
+              <Zap className="w-3 h-3" /> Publicações no período
             </p>
             {bestHour && (
               <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">

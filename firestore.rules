@@ -9,7 +9,6 @@ service cloud.firestore {
     }
 
     // Verifica domínio diretamente no token JWT do Firebase Auth.
-    // Não depende de nenhum documento Firestore nem de Cloud Function deployada.
     // request.auth.token.email é preenchido pelo Google Sign-In.
     function isMiranteUser() {
       return isAuthenticated() &&
@@ -18,20 +17,48 @@ service cloud.firestore {
         request.auth.token.email.matches('.*@mirante[.]com[.]br');
     }
 
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isCurrentUserAdmin() {
-      return isMiranteUser() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      let u = getUserData();
+      return isMiranteUser() && (
+        u.role == 'admin' ||
+        u.role == 'superadmin' ||
+        u.isAdmin == true
+      );
+    }
+
+    function isSuperAdmin() {
+      return isMiranteUser() && getUserData().role == 'superadmin';
     }
 
     // ─── Users ────────────────────────────────────────────────────────────────
 
     match /users/{userId} {
       allow read: if isMiranteUser();
-      // Admins podem promover/rebaixar outros; ninguém altera o próprio status
+
+      // Superadmins can change role, isAdmin, and accounts on other users
+      allow update: if isSuperAdmin() &&
+        userId != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['role', 'isAdmin', 'accounts', 'updatedAt']);
+
+      // Legacy: any admin can toggle isAdmin on other users
       allow update: if isCurrentUserAdmin() &&
         userId != request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAdmin']);
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['isAdmin']);
+
       allow create, delete: if false;
+    }
+
+    // ─── Radar Accounts ───────────────────────────────────────────────────────
+
+    match /radarAccounts/{accountId} {
+      allow read: if isMiranteUser();
+      allow write: if isSuperAdmin();
     }
 
     // ─── Posts ────────────────────────────────────────────────────────────────
@@ -52,7 +79,6 @@ service cloud.firestore {
     }
 
     // Permite collectionGroup('comments') e collectionGroup('snapshots')
-    // sem esta regra wildcard queries de collection group são negadas
     match /{path=**}/comments/{commentId} {
       allow read: if isMiranteUser();
     }
@@ -64,7 +90,10 @@ service cloud.firestore {
 
     match /opportunities/{opportunityId} {
       allow read: if isMiranteUser();
-      allow write: if false;
+      allow update: if isMiranteUser() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'updatedAt']);
+      allow create, delete: if false;
     }
 
     // ─── Topics ───────────────────────────────────────────────────────────────
@@ -115,15 +144,12 @@ service cloud.firestore {
           resource.data.visibleTo.hasAny([request.auth.uid])
         )
       }
-      function isCredentialAdmin() {
-        return isCurrentUserAdmin()
-      }
       allow read: if canReadCredential()
-      allow create: if isCredentialAdmin() &&
+      allow create: if isCurrentUserAdmin() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.keys().hasAll(['name', 'platform', 'loginType', 'visibleTo', 'createdBy', 'createdAt', 'updatedAt'])
-      allow update: if isCredentialAdmin()
-      allow delete: if isCredentialAdmin()
+      allow update: if isCurrentUserAdmin()
+      allow delete: if isCurrentUserAdmin()
     }
 
     // ─── Instagram Insights ───────────────────────────────────────────────────

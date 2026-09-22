@@ -123,16 +123,18 @@ function buildAllSlots(posts: RadarPost[]): ChartSlot[] {
 
 function buildChartData(posts: RadarPost[], tf: TimeFilter): ChartSlot[] {
   switch (tf) {
-    case 'now':  return buildHourlySlots(posts, 24)
-    case '3h':   return buildHourlySlots(posts, 3)
-    case '6h':   return buildHourlySlots(posts, 6)
-    case '24h':  return buildHourlySlots(posts, 24)
-    case '3d':   return buildDailySlots(posts, 3)
-    case '7d':   return buildDailySlots(posts, 7)
-    case '15d':  return buildDailySlots(posts, 15)
-    case '30d':  return buildDailySlots(posts, 30)
-    case 'all':  return buildAllSlots(posts)
-    default:     return buildHourlySlots(posts, 24)
+    case 'now':    return buildHourlySlots(posts, 24)
+    case '3h':     return buildHourlySlots(posts, 3)
+    case '6h':     return buildHourlySlots(posts, 6)
+    case '24h':    return buildHourlySlots(posts, 24)
+    case '2d':     return buildDailySlots(posts, 2)
+    case '3d':     return buildDailySlots(posts, 3)
+    case '7d':     return buildDailySlots(posts, 7)
+    case '15d':    return buildDailySlots(posts, 15)
+    case '30d':    return buildDailySlots(posts, 30)
+    case 'all':
+    case 'custom': return buildAllSlots(posts)
+    default:       return buildHourlySlots(posts, 24)
   }
 }
 

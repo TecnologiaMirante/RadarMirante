@@ -1,4 +1,4 @@
-// Configuração central do Radar Mirante.
+// Configuração central do Mirante Radar.
 // Todos os parâmetros operacionais ficam aqui — sem números mágicos no código.
 
 export const RADAR_CONFIG = {

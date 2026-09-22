@@ -20,6 +20,7 @@
     }
   ],
   "hosting": {
+    "site": "miranteradar",
     "public": "dist",
     "ignore": [
       "firebase.json",

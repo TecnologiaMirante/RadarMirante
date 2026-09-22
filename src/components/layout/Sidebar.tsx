@@ -5,11 +5,11 @@ import {
   LayoutDashboard, Sparkles, Instagram, BarChart2, ChevronDown, Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useAccount, ACCOUNT_LABELS, ACCOUNT_COLORS, RADAR_ACCOUNTS, type RadarAccount } from '@/contexts/AccountContext'
+import { useAccount } from '@/contexts/AccountContext'
 import imiranteLogo from '@/assets/imirante_logo.png'
 import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 
-const ACCOUNT_LOGOS: Record<RadarAccount, string> = {
+const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
   imiranteesporte: imiranteEsporteLogo,
 }
@@ -44,8 +44,9 @@ function getCollapsed(): boolean {
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(getCollapsed)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const { account, setAccount } = useAccount()
-  const color = ACCOUNT_COLORS[account]
+  const { account, setAccount, accounts, getAccount } = useAccount()
+  const currentConfig = getAccount(account)
+  const color = currentConfig?.color ?? '#38B6FF'
 
   function toggle() {
     setCollapsed(v => {
@@ -56,7 +57,7 @@ export function Sidebar() {
     })
   }
 
-  function selectAccount(acc: typeof account) {
+  function selectAccount(acc: string) {
     setAccount(acc)
     setSwitcherOpen(false)
   }
@@ -77,12 +78,21 @@ export function Sidebar() {
             collapsed ? 'h-14 justify-center px-0' : 'gap-3 px-3 py-3 hover:bg-accent/40',
           )}
         >
-          <img
-            src={ACCOUNT_LOGOS[account]}
-            alt={ACCOUNT_LABELS[account]}
-            className="w-8 h-8 rounded-xl object-cover flex-shrink-0 shadow-sm ring-2"
-            style={{ outline: `2px solid ${color}55`, outlineOffset: '1px' }}
-          />
+          {ACCOUNT_LOGOS[account] ? (
+            <img
+              src={ACCOUNT_LOGOS[account]}
+              alt={currentConfig?.displayName ?? account}
+              className="w-8 h-8 rounded-xl object-cover flex-shrink-0 shadow-sm ring-2"
+              style={{ outline: `2px solid ${color}55`, outlineOffset: '1px' }}
+            />
+          ) : (
+            <div
+              className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm"
+              style={{ backgroundColor: color }}
+            >
+              {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
+            </div>
+          )}
           {!collapsed && (
             <>
               <div className="min-w-0 flex-1 text-left">
@@ -90,7 +100,7 @@ export function Sidebar() {
                   Radar
                 </p>
                 <p className="text-sm font-bold text-foreground leading-tight truncate">
-                  {ACCOUNT_LABELS[account]}
+                  {currentConfig?.displayName ?? account}
                 </p>
               </div>
               <ChevronDown
@@ -109,12 +119,13 @@ export function Sidebar() {
             switcherOpen ? 'max-h-32' : 'max-h-0',
           )}>
             <div className="px-2 pb-2.5 pt-1 space-y-0.5">
-              {RADAR_ACCOUNTS.map(acc => {
-                const active = acc === account
+              {accounts.map(acc => {
+                const active = acc.id === account
+                const logo = ACCOUNT_LOGOS[acc.id]
                 return (
                   <button
-                    key={acc}
-                    onClick={() => selectAccount(acc)}
+                    key={acc.id}
+                    onClick={() => selectAccount(acc.id)}
                     className={cn(
                       'w-full flex items-center gap-3 px-2.5 py-2 rounded-lg transition-all duration-150',
                       active
@@ -122,13 +133,22 @@ export function Sidebar() {
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                     )}
                   >
-                    <img
-                      src={ACCOUNT_LOGOS[acc]}
-                      alt={ACCOUNT_LABELS[acc]}
-                      className="w-7 h-7 rounded-lg object-cover flex-shrink-0 ring-1 ring-border/30"
-                    />
+                    {logo ? (
+                      <img
+                        src={logo}
+                        alt={acc.displayName}
+                        className="w-7 h-7 rounded-lg object-cover flex-shrink-0 ring-1 ring-border/30"
+                      />
+                    ) : (
+                      <div
+                        className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold"
+                        style={{ backgroundColor: acc.color }}
+                      >
+                        {acc.shortName[0]?.toUpperCase()}
+                      </div>
+                    )}
                     <span className="flex-1 text-left text-xs font-semibold truncate">
-                      {ACCOUNT_LABELS[acc]}
+                      {acc.displayName}
                     </span>
                     {active && <Check className="w-3.5 h-3.5 flex-shrink-0 text-primary" />}
                   </button>
@@ -206,7 +226,7 @@ export function Sidebar() {
             <div className="flex items-center gap-1.5">
               <BarChart2 className="w-3 h-3" style={{ color: color + 'cc' }} />
               <p className="text-[10px] font-semibold" style={{ color: color + 'cc' }}>
-                {account === 'imirante' ? 'Radar Mirante' : 'Radar Mirante Esporte'}
+                {currentConfig ? `Radar ${currentConfig.shortName}` : 'Mirante Radar'}
               </p>
             </div>
             <p className="text-[9px] text-muted-foreground leading-relaxed">

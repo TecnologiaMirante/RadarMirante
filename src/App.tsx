@@ -1,16 +1,18 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { AccountProvider } from '@/contexts/AccountContext'
 import { useAuth } from '@/hooks/useAuth'
 import AppLayout from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
-import Radar from '@/pages/Radar'
-import Dashboard from '@/pages/Dashboard'
-import AnalysesPage from '@/pages/Analyses'
-import InstagramPage from '@/pages/Instagram'
-import PostDetails from '@/pages/PostDetails'
-import OpportunityDetails from '@/pages/OpportunityDetails'
-import Settings from '@/pages/Settings'
+
+const Radar = lazy(() => import('@/pages/Radar'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const AnalysesPage = lazy(() => import('@/pages/Analyses'))
+const InstagramPage = lazy(() => import('@/pages/Instagram'))
+const PostDetails = lazy(() => import('@/pages/PostDetails'))
+const OpportunityDetails = lazy(() => import('@/pages/OpportunityDetails'))
+const Settings = lazy(() => import('@/pages/Settings'))
 
 function LoadingScreen() {
   return (
@@ -57,13 +59,13 @@ function AppRoutes() {
         }
       >
         <Route index element={<Navigate to="/radar" replace />} />
-        <Route path="radar" element={<Radar />} />
-        <Route path="radar/post/:postId" element={<PostDetails />} />
-        <Route path="radar/:opportunityId" element={<OpportunityDetails />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="analises" element={<AnalysesPage />} />
-        <Route path="instagram" element={<InstagramPage />} />
-        <Route path="settings" element={<Settings />} />
+        <Route path="radar" element={<Suspense fallback={<LoadingScreen />}><Radar /></Suspense>} />
+        <Route path="radar/post/:postId" element={<Suspense fallback={<LoadingScreen />}><PostDetails /></Suspense>} />
+        <Route path="radar/:opportunityId" element={<Suspense fallback={<LoadingScreen />}><OpportunityDetails /></Suspense>} />
+        <Route path="dashboard" element={<Suspense fallback={<LoadingScreen />}><Dashboard /></Suspense>} />
+        <Route path="analises" element={<Suspense fallback={<LoadingScreen />}><AnalysesPage /></Suspense>} />
+        <Route path="instagram" element={<Suspense fallback={<LoadingScreen />}><InstagramPage /></Suspense>} />
+        <Route path="settings" element={<Suspense fallback={<LoadingScreen />}><Settings /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/radar" replace />} />
     </Routes>

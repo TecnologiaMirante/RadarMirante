@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, MessageCircle, Heart, Eye, Clock } from 'lucide-react'
+import { ExternalLink, MessageCircle, Heart, Eye, Clock, Zap, Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
@@ -7,6 +8,7 @@ import { ScoreBadge } from './ScoreBadge'
 import { PlatformBadge } from './PlatformBadge'
 import type { RadarPost } from '@/types/radar'
 import { cn } from '@/lib/utils'
+import { triggerPostAnalysis } from '@/services/radar'
 
 const STATUS_CONFIG: Record<
   RadarPost['status'],
@@ -48,9 +50,26 @@ const STATUS_CONFIG: Record<
 
 export function PostCard({ post }: { post: RadarPost }) {
   const navigate = useNavigate()
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   const s = STATUS_CONFIG[post.status]
   const isTrending = post.status === 'trending'
   const isCandidate = post.status === 'candidate'
+  const canAnalyze = post.status === 'trending' || post.status === 'candidate'
+
+  async function handleAnalyze(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (analyzing) return
+    setAnalyzing(true)
+    setAnalyzeError(null)
+    try {
+      const { opportunityId } = await triggerPostAnalysis(post.id)
+      navigate(`/radar/${opportunityId}`)
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : 'Erro ao analisar')
+      setAnalyzing(false)
+    }
+  }
 
   const publishedAgo = formatDistanceToNow(post.publishedAt.toDate(), {
     addSuffix: true, locale: ptBR,
@@ -143,11 +162,33 @@ export function PostCard({ post }: { post: RadarPost }) {
           </div>
         </div>
 
-        {/* Time */}
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
-          <Clock className="w-3 h-3" />
-          {publishedAgo}
+        {/* Time + Analyze */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+            <Clock className="w-3 h-3" />
+            {publishedAgo}
+          </div>
+          {canAnalyze && (
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              className={cn(
+                'flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold border transition-all',
+                analyzing
+                  ? 'bg-primary/10 border-primary/30 text-primary cursor-wait'
+                  : 'bg-transparent border-border/50 text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary',
+              )}
+            >
+              {analyzing
+                ? <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Analisando…</>
+                : <><Zap className="w-2.5 h-2.5" /> Analisar</>
+              }
+            </button>
+          )}
         </div>
+        {analyzeError && (
+          <p className="text-[10px] text-red-400 leading-snug">{analyzeError}</p>
+        )}
 
       </CardContent>
     </Card>

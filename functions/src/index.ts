@@ -41,6 +41,9 @@ export const onUserCreated = functions
       email: user.email,
       displayName: user.displayName ?? '',
       photoURL: user.photoURL ?? '',
+      role: 'user',
+      isAdmin: false,
+      accounts: ['imirante'],
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     })

@@ -12,7 +12,7 @@ const PLATFORM_CONFIG: Record<
   { label: string; className: string; Icon: React.ComponentType<{ className?: string }> }
 > = {
   imirante: {
-    label: 'Mirante',
+    label: 'Imirante',
     className: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
     Icon: Globe,
   },

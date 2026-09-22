@@ -2,31 +2,20 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Sparkles, ArrowUpRight, TrendingUp, MessageCircle,
-  Clock, RefreshCw, Filter, Calendar, ChevronDown,
+  Clock, RefreshCw, Filter, ArrowDownUp,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { getOpportunities } from '@/services/radar'
-import type { Opportunity, OpportunityStatus, TimeFilter } from '@/types/radar'
+import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
+import { useTimeFilter } from '@/hooks/useTimeFilter'
+import { getOpportunities, updateOpportunityStatus } from '@/services/radar'
+import type { Opportunity, OpportunityStatus } from '@/types/radar'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Timestamp } from 'firebase/firestore'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-const TIME_FILTERS: { value: TimeFilter; label: string; group: string }[] = [
-  { value: 'now', label: 'Última hora',    group: 'Recente' },
-  { value: '3h',  label: 'Últimas 3h',     group: 'Recente' },
-  { value: '6h',  label: 'Últimas 6h',     group: 'Recente' },
-  { value: '24h', label: 'Últimas 24h',    group: 'Hoje' },
-  { value: '2d',  label: 'Últimos 2 dias', group: 'Período' },
-  { value: '3d',  label: 'Últimos 3 dias', group: 'Período' },
-  { value: '7d',  label: 'Últimos 7 dias', group: 'Período' },
-  { value: '15d', label: '15 dias',        group: 'Período' },
-  { value: '30d', label: '30 dias',        group: 'Período' },
-  { value: 'all', label: 'Desde 15/09',    group: 'Histórico' },
-]
 
 const TIME_MS: Record<string, number | null> = {
   now:  1  * 60 * 60 * 1000,
@@ -61,79 +50,49 @@ const STATUS_FILTERS: { value: OpportunityStatus | 'all'; label: string }[] = [
   { value: 'dismissed',    label: 'Descartadas' },
 ]
 
-// ─── DateDropdown ─────────────────────────────────────────────────────────────
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'recent',    label: 'Mais recentes' },
+  { value: 'score',     label: 'Maior score' },
+  { value: 'potential', label: 'Maior potencial' },
+]
 
-function DateDropdown({ value, onChange }: { value: TimeFilter; onChange: (v: TimeFilter) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const current = TIME_FILTERS.find(f => f.value === value) ?? TIME_FILTERS[3]
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  const groups = Array.from(new Set(TIME_FILTERS.map(f => f.group)))
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={cn(
-          'flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-medium transition-all',
-          open
-            ? 'bg-primary/10 border-primary/40 text-primary'
-            : 'bg-card border-border text-muted-foreground hover:border-border/80 hover:text-foreground',
-        )}
-      >
-        <Calendar className="w-3 h-3 opacity-70" />
-        <span>{current.label}</span>
-        <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden py-1.5">
-          {groups.map(group => (
-            <div key={group}>
-              <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-3 pt-2 pb-1">
-                {group}
-              </p>
-              {TIME_FILTERS.filter(f => f.group === group).map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => { onChange(f.value); setOpen(false) }}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-1.5 text-sm transition-colors',
-                    f.value === value
-                      ? 'bg-primary/10 text-primary font-semibold'
-                      : 'text-foreground/80 hover:bg-accent hover:text-foreground',
-                  )}
-                >
-                  <span>{f.label}</span>
-                  {f.value === value && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+type SortBy = 'recent' | 'score' | 'potential'
 
 // ─── OpportunityCard ──────────────────────────────────────────────────────────
 
-function OpportunityCard({ opp }: { opp: Opportunity }) {
+function OpportunityCard({ opp, onStatusChange }: { opp: Opportunity; onStatusChange: (id: string, status: OpportunityStatus) => void }) {
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const dropRef = useRef<HTMLDivElement>(null)
   const createdAgo = formatDistanceToNow((opp.createdAt as unknown as Timestamp).toDate(), { addSuffix: true, locale: ptBR })
   const status = STATUS_CONFIG[opp.status]
   const highIdeas = opp.storyIdeas?.filter(i => i.priority === 'high').length ?? 0
   const totalIdeas = opp.storyIdeas?.length ?? 0
+
+  useEffect(() => {
+    if (!statusOpen) return
+    function handle(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setStatusOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [statusOpen])
+
+  async function changeStatus(s: OpportunityStatus, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (s === opp.status || saving) return
+    setSaving(true)
+    setStatusOpen(false)
+    try {
+      await updateOpportunityStatus(opp.id, s)
+      onStatusChange(opp.id, s)
+    } catch (err) {
+      console.error('[Analyses] status update', err)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Link to={`/radar/${opp.id}`}>
@@ -142,9 +101,38 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', status.color)}>
-                  {status.label}
-                </span>
+                {/* Quick status picker */}
+                <div ref={dropRef} className="relative" onClick={e => e.preventDefault()}>
+                  <button
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setStatusOpen(v => !v) }}
+                    disabled={saving}
+                    className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors',
+                      status.color,
+                      !saving && 'hover:opacity-80',
+                    )}
+                  >
+                    {saving ? '…' : status.label}
+                  </button>
+                  {statusOpen && (
+                    <div className="absolute left-0 top-full mt-1 w-40 rounded-lg border border-border bg-popover shadow-xl z-50 py-1 overflow-hidden">
+                      {(Object.keys(STATUS_CONFIG) as OpportunityStatus[]).map(s => (
+                        <button
+                          key={s}
+                          onClick={e => void changeStatus(s, e)}
+                          className={cn(
+                            'w-full text-left px-3 py-1.5 text-xs transition-colors',
+                            s === opp.status
+                              ? 'font-bold text-primary bg-primary/5'
+                              : 'text-foreground/80 hover:bg-accent',
+                          )}
+                        >
+                          {STATUS_CONFIG[s].label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {opp.platform && (
                   <span className="text-[10px] text-muted-foreground/60 capitalize">{opp.platform}</span>
                 )}
@@ -212,7 +200,8 @@ export default function AnalysesPage() {
   const [allOpps, setAllOpps] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<OpportunityStatus | 'all'>('all')
-  const [displayTime, setDisplayTime] = useState<TimeFilter>('2d')
+  const { time: displayTime, customFrom, customTo, set: setDisplayTime } = useTimeFilter()
+  const [sortBy, setSortBy] = useState<SortBy>('recent')
 
   async function load() {
     setLoading(true)
@@ -228,7 +217,19 @@ export default function AnalysesPage() {
 
   useEffect(() => { void load() }, [])
 
+  function handleStatusChange(id: string, status: OpportunityStatus) {
+    setAllOpps(prev => prev.map(o => o.id === id ? { ...o, status } : o))
+  }
+
   const opps = useMemo(() => {
+    if (displayTime === 'custom') {
+      const from = customFrom ?? 0
+      const to = customTo ?? Date.now()
+      return allOpps.filter(o => {
+        const ms = (o.createdAt as unknown as Timestamp).toMillis()
+        return ms >= from && ms <= to
+      })
+    }
     const cutoff = TIME_MS[displayTime]
     if (cutoff === null) return allOpps
     const since = Date.now() - cutoff
@@ -236,12 +237,18 @@ export default function AnalysesPage() {
       const ts = o.createdAt as unknown as Timestamp
       return ts.toMillis() >= since
     })
-  }, [allOpps, displayTime])
+  }, [allOpps, displayTime, customFrom, customTo])
 
-  const filtered = useMemo(() =>
-    statusFilter === 'all' ? opps : opps.filter(o => o.status === statusFilter),
-    [opps, statusFilter]
-  )
+  const filtered = useMemo(() => {
+    const base = statusFilter === 'all' ? opps : opps.filter(o => o.status === statusFilter)
+    return [...base].sort((a, b) => {
+      if (sortBy === 'score') return b.trendScore - a.trendScore
+      if (sortBy === 'potential') return b.editorialPotential - a.editorialPotential
+      const aTs = a.createdAt as unknown as Timestamp
+      const bTs = b.createdAt as unknown as Timestamp
+      return (bTs?.toMillis?.() ?? 0) - (aTs?.toMillis?.() ?? 0)
+    })
+  }, [opps, statusFilter, sortBy])
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: opps.length }
@@ -251,7 +258,7 @@ export default function AnalysesPage() {
     return c
   }, [opps])
 
-  const timeLabel = TIME_FILTERS.find(f => f.value === displayTime)?.label ?? displayTime
+  const timeLabel = getPresetLabel(displayTime, customFrom, customTo)
 
   return (
     <div className="space-y-5">
@@ -271,7 +278,32 @@ export default function AnalysesPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <DateDropdown value={displayTime} onChange={setDisplayTime} />
+          {/* Sort selector */}
+          <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden h-8">
+            <span className="px-2 text-muted-foreground/50 flex items-center">
+              <ArrowDownUp className="w-3 h-3" />
+            </span>
+            {SORT_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSortBy(opt.value)}
+                className={cn(
+                  'px-2.5 h-full text-xs font-medium transition-colors border-l border-border',
+                  sortBy === opt.value
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <DateDropdown
+            value={displayTime}
+            customFrom={customFrom}
+            customTo={customTo}
+            onChange={(time, from, to) => setDisplayTime(time, from, to)}
+          />
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="gap-1.5 h-8 text-xs">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
@@ -324,7 +356,7 @@ export default function AnalysesPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {filtered.map(opp => (
-            <OpportunityCard key={opp.id} opp={opp} />
+            <OpportunityCard key={opp.id} opp={opp} onStatusChange={handleStatusChange} />
           ))}
         </div>
       )}

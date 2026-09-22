@@ -11,7 +11,7 @@ export default function AppLayout() {
   // ─── EM PRODUÇÃO: substitui conteúdo quando conta for imiranteesporte ────────
   const { account } = useAccount()
   const content = account === 'imiranteesporte'
-    ? <EmProducao titulo="Radar Mirante Esporte" descricao="O Radar do Mirante Esporte está sendo configurado e estará disponível em breve." />
+    ? <EmProducao titulo="Mirante Radar Esporte" descricao="O Radar do Mirante Esporte está sendo configurado e estará disponível em breve." />
     : <Outlet />
   // ─── Para reativar: substitua {content} por <Outlet /> e remova as 3 linhas acima
   // ─────────────────────────────────────────────────────────────────────────────

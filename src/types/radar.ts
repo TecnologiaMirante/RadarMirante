@@ -5,7 +5,7 @@ import type { Timestamp } from 'firebase/firestore'
 export type SocialPlatform = 'imirante' | 'instagram' | 'facebook' | 'youtube' | 'x'
 
 export const PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  imirante: 'Mirante',
+  imirante: 'Imirante',
   instagram: 'Instagram',
   facebook: 'Facebook',
   youtube: 'YouTube',
@@ -269,7 +269,7 @@ export interface PlatformConfig {
 
 export type PlatformFilter = 'all' | SocialPlatform
 
-export type TimeFilter = 'now' | '3h' | '6h' | '24h' | '2d' | '3d' | '7d' | '15d' | '30d' | 'all'
+export type TimeFilter = 'now' | '3h' | '6h' | '24h' | '2d' | '3d' | '7d' | '15d' | '30d' | 'all' | 'custom'
 
 export type SortOption = 'score' | 'recent' | 'growth' | 'comments'
 
@@ -277,4 +277,6 @@ export interface RadarFilters {
   platform: PlatformFilter
   time: TimeFilter
   sort: SortOption
+  customFrom?: number   // ms timestamp — only when time === 'custom'
+  customTo?: number     // ms timestamp — only when time === 'custom'
 }

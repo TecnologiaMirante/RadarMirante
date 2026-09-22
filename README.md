@@ -1,4 +1,4 @@
-# Radar Mirante
+# Mirante Radar
 
 Plataforma interna de inteligência de audiência em tempo real para a redação do Mirante. Monitora posts de Instagram, YouTube e TikTok, detecta tendências via score estatístico e dispara análises editoriais com IA.
 
@@ -100,7 +100,7 @@ Credenciais sensíveis **nunca ficam em código ou `.env`**. São gerenciadas vi
 | Secret | Descrição |
 |---|---|
 | `OPENAI_API_KEY` | Chave da API OpenAI (GPT-4o) |
-| `INSTAGRAM_ACCESS_TOKEN` | System User Token — Meta / Radar Mirante App |
+| `INSTAGRAM_ACCESS_TOKEN` | System User Token — Meta / Mirante Radar App |
 | `INSTAGRAM_ACCOUNT_ID` | ID numérico da conta Business do Instagram |
 
 Para adicionar ou atualizar uma versão:
@@ -185,7 +185,7 @@ analyzePost (Cloud Tasks)
 Algumas features estão em modo placeholder enquanto aguardam aprovação de API ou configuração:
 
 - **Instagram · Métricas do perfil** — aguarda Meta App Review (Advanced Access para `instagram_manage_insights`)
-- **Radar Mirante Esporte** (toda a conta `imiranteesporte`) — aguarda configuração
+- **Mirante Radar Esporte** (toda a conta `imiranteesporte`) — aguarda configuração
 
 Para reativar, ver comentários em `src/pages/Instagram.tsx` e `src/components/layout/AppLayout.tsx`.
 
@@ -195,5 +195,5 @@ Para reativar, ver comentários em `src/pages/Instagram.tsx` e `src/components/l
 
 | Ambiente | URL |
 |---|---|
-| Produção | https://radarimirante.web.app |
+| Produção | https://miranteradar.web.app |
 | Firebase Console | https://console.firebase.google.com/project/radarimirante |
