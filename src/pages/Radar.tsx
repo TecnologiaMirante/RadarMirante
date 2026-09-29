@@ -15,13 +15,12 @@ import { PostRow } from '@/components/radar/PostRow'
 import { EmptyState } from '@/components/radar/EmptyState'
 import { WordCloud } from '@/components/radar/WordCloud'
 import { ActivityChart } from '@/components/radar/ActivityChart'
-import { InstagramInsightsPanel } from '@/components/radar/InstagramInsightsPanel'
 import { InfoTip } from '@/components/ui/InfoTip'
 import { useRadar } from '@/hooks/useRadar'
 import { useAccount, ACCOUNT_COLORS, ACCOUNT_PAGE_TITLES } from '@/contexts/AccountContext'
 import { getRecentCommentTexts } from '@/services/radar'
 import type { SortOption, RadarPost } from '@/types/radar'
-import { DateDropdown, TIME_FILTER_PRESETS } from '@/components/ui/DateDropdown'
+import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -50,13 +49,6 @@ const CONTENT_TABS: { value: ContentTab; label: string }[] = [
   { value: 'analyzed',  label: 'Analisados' },
 ]
 
-const PLATFORM_CONFIG: Record<string, { label: string; color: string }> = {
-  instagram: { label: 'Instagram', color: 'bg-pink-400' },
-  imirante:  { label: 'Site',      color: 'bg-blue-400' },
-  facebook:  { label: 'Facebook',  color: 'bg-indigo-400' },
-  youtube:   { label: 'YouTube',   color: 'bg-red-400' },
-  x:         { label: 'X',         color: 'bg-zinc-400' },
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -180,6 +172,8 @@ export default function Radar() {
   const [view, setView] = useState<'grid' | 'list'>('list')
   const [contentTab, setContentTab] = useState<ContentTab>('all')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 30
 
   useEffect(() => {
     setCloudLoading(true)
@@ -188,6 +182,13 @@ export default function Radar() {
       .catch(console.error)
       .finally(() => setCloudLoading(false))
   }, [cloudPeriod])
+
+  const overrideAllLabel = useMemo(() => {
+    if (posts.length === 0) return undefined
+    const earliest = Math.min(...posts.map(p => (p.publishedAt as unknown as import('firebase/firestore').Timestamp).toMillis()))
+    const d = new Date(earliest)
+    return `Desde ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  }, [posts])
 
   // Derivados
   const trendingPosts   = useMemo(() => posts.filter(p => p.status === 'trending'),   [posts])
@@ -207,13 +208,6 @@ export default function Radar() {
   const top5    = topByComments.slice(0, 5)
   const topPost = topByComments[0]
 
-  const platformCounts = useMemo(() => posts.reduce<Record<string, number>>((acc, p) => {
-    acc[p.platform] = (acc[p.platform] ?? 0) + 1; return acc
-  }, {}), [posts])
-
-  const platformEngagement = useMemo(() => posts.reduce<Record<string, number>>((acc, p) => {
-    acc[p.platform] = (acc[p.platform] ?? 0) + p.metrics.comments; return acc
-  }, {}), [posts])
 
   const statusBreakdown = [
     { label: 'Repercutindo', count: trendingPosts.length,   color: 'bg-red-500' },
@@ -235,22 +229,6 @@ export default function Radar() {
     return best ? `${String(best[0]).padStart(2, '0')}h` : null
   }, [posts])
 
-  const mostRecent = useMemo(() =>
-    [...posts].sort((a, b) => b.publishedAt.toDate().getTime() - a.publishedAt.toDate().getTime())[0],
-    [posts])
-
-  const topWords = useMemo(() => {
-    if (cloudTexts.length === 0) return []
-    const stopwords = new Set(['de','a','o','e','do','da','em','que','para','com','uma','um','no','na','os','as','se','por','mais','mas','foi','ele','ao','dos','das','já','sua','seu','tem','não','é','ou','quando','isso','esta','vai','só','porque','aqui','como','também','muito','isso','sem','essa','esse','ser','ter','fazer','pode','sobre'])
-    const freq: Record<string, number> = {}
-    cloudTexts.forEach(t => {
-      t.toLowerCase().split(/\s+/).forEach(w => {
-        const clean = w.replace(/[^a-záàâãéèêíóôõúüçñ]/gi, '')
-        if (clean.length > 3 && !stopwords.has(clean)) freq[clean] = (freq[clean] ?? 0) + 1
-      })
-    })
-    return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8)
-  }, [cloudTexts])
 
   // Distribuição de score: 0-39 / 40-64 / 65-79 / 80+
   const scoreDistribution = useMemo(() => {
@@ -313,40 +291,59 @@ export default function Radar() {
     return base
   }, [posts, contentTab, search, trendingPosts, candidatePosts, analyzedPosts])
 
-  const renderPostList = (postList: RadarPost[]) => {
+  // Reset page when filters/search change
+  useEffect(() => { setPage(1) }, [contentTab, search, filters.sort, filters.time])
+
+  const paginatedPosts = useMemo(() => filteredPosts.slice(0, page * PAGE_SIZE), [filteredPosts, page, PAGE_SIZE])
+  const hasMore = filteredPosts.length > page * PAGE_SIZE
+
+  const renderPostList = (postList: RadarPost[], total: number) => {
     if (postList.length === 0)
       return <EmptyState title="Nenhuma publicação" description="Tente mudar os filtros ou aguarde a próxima coleta." />
+
+    const loadMoreBtn = hasMore && (
+      <button
+        onClick={() => setPage(p => p + 1)}
+        className="w-full mt-3 py-2.5 text-xs font-medium text-muted-foreground border border-border/60 rounded-lg hover:bg-accent hover:text-foreground transition-colors"
+      >
+        Carregar mais · mostrando {postList.length} de {total}
+      </button>
+    )
+
     if (view === 'list') {
       return (
-        <div className="rounded-lg border border-border/60 bg-card">
-          <div className="flex items-center gap-3 px-4 py-2 bg-secondary/30 border-b border-border/60 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-            <div className="w-5" /><div className="w-1.5" />
-            <span className="flex-1">Publicação</span>
-            <span className="w-14 hidden md:flex items-center justify-end gap-1">
-              Tendência
-              <InfoTip side="top">
-                <p className="font-semibold text-foreground mb-1.5">Curva de tendência</p>
-                <p className="text-muted-foreground mb-2">Miniatura visual da evolução do trendScore ao longo do tempo.</p>
-                <div className="space-y-1 text-muted-foreground text-[11px]">
-                  <p><strong className="trending-text">Repercutindo</strong> — score ≥ 80, pautar agora</p>
-                  <p><strong className="candidate-text">Aquecendo</strong> — score 65–79, monitorar</p>
-                  <p><strong className="text-muted-foreground">Monitorando</strong> — score 0–39, acompanhamento normal. A publicação é coletada mas ainda não mostra crescimento acima do esperado.</p>
-                  <p><strong className="text-green-400">Analisado</strong> — processado pela IA editorial</p>
-                </div>
-              </InfoTip>
-            </span>
-            <span className="w-12 flex items-center gap-1">
-              Score
-              <InfoTip side="top">
-                <p className="font-semibold text-foreground mb-1">Trend Score (0–100)</p>
-                <p className="text-muted-foreground">Relevância estatística da publicação. Calculado com base em velocidade de comentários, aceleração e volume.</p>
-              </InfoTip>
-            </span>
-            <span className="w-16 text-right">Coment.</span>
-            <span className="w-12 text-right hidden lg:block">Likes</span>
-            <div className="w-6" />
+        <div>
+          <div className="rounded-lg border border-border/60 bg-card">
+            <div className="flex items-center gap-3 px-4 py-2 bg-secondary/30 border-b border-border/60 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+              <div className="w-5" /><div className="w-1.5" />
+              <span className="flex-1">Publicação</span>
+              <span className="w-14 hidden md:flex items-center justify-end gap-1">
+                Tendência
+                <InfoTip side="top">
+                  <p className="font-semibold text-foreground mb-1.5">Curva de tendência</p>
+                  <p className="text-muted-foreground mb-2">Miniatura visual da evolução do trendScore ao longo do tempo.</p>
+                  <div className="space-y-1 text-muted-foreground text-[11px]">
+                    <p><strong className="trending-text">Repercutindo</strong> — score ≥ 80, pautar agora</p>
+                    <p><strong className="candidate-text">Aquecendo</strong> — score 65–79, monitorar</p>
+                    <p><strong className="text-muted-foreground">Monitorando</strong> — score 0–39, acompanhamento normal. A publicação é coletada mas ainda não mostra crescimento acima do esperado.</p>
+                    <p><strong className="text-green-400">Analisado</strong> — processado pela IA editorial</p>
+                  </div>
+                </InfoTip>
+              </span>
+              <span className="w-12 flex items-center gap-1">
+                Score
+                <InfoTip side="top">
+                  <p className="font-semibold text-foreground mb-1">Trend Score (0–100)</p>
+                  <p className="text-muted-foreground">Relevância estatística da publicação. Calculado com base em velocidade de comentários, aceleração e volume.</p>
+                </InfoTip>
+              </span>
+              <span className="w-16 text-right">Coment.</span>
+              <span className="w-12 text-right hidden lg:block">Likes</span>
+              <div className="w-6" />
+            </div>
+            {postList.map((post, i) => <PostRow key={post.id} post={post} rank={i + 1} />)}
           </div>
-          {postList.map((post, i) => <PostRow key={post.id} post={post} rank={i + 1} />)}
+          {loadMoreBtn}
         </div>
       )
     }
@@ -373,6 +370,7 @@ export default function Radar() {
             </div>
           </div>
         )}
+        {loadMoreBtn}
       </div>
     )
   }
@@ -392,12 +390,7 @@ export default function Radar() {
           <div>
             <h1 className="text-xl font-bold text-foreground leading-none">{pageTitle}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {loading ? 'Carregando…' : (() => {
-                const label = filters.time === 'custom'
-                  ? 'período personalizado'
-                  : (TIME_FILTER_PRESETS.find(f => f.value === filters.time)?.label ?? filters.time).toLowerCase()
-                return `${posts.length} publicações · ${label}`
-              })()}
+              {loading ? 'Carregando…' : `${posts.length} publicações · ${getPresetLabel(filters.time, filters.customFrom, filters.customTo, overrideAllLabel).toLowerCase()}`}
             </p>
           </div>
         </div>
@@ -407,6 +400,7 @@ export default function Radar() {
             customFrom={filters.customFrom}
             customTo={filters.customTo}
             onChange={(time, from, to) => setFilters(f => ({ ...f, time, customFrom: from, customTo: to }))}
+            overrideAllLabel={overrideAllLabel}
           />
           <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading} className="gap-1.5 h-8 text-xs">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
@@ -617,7 +611,7 @@ export default function Radar() {
               ))}
             </div>
           ) : (
-            renderPostList(filteredPosts)
+            renderPostList(paginatedPosts, filteredPosts.length)
           )}
         </div>
 
@@ -734,36 +728,7 @@ export default function Radar() {
             </CardContent>
           </Card>
 
-          {/* 5. Por plataforma */}
-          <Card className="border-border/60">
-            <CardContent className="p-4 space-y-4">
-              <SideSection title="Por plataforma · posts">
-                {Object.keys(platformCounts).length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">Sem dados</p>
-                ) : (
-                  Object.entries(platformCounts).sort((a, b) => b[1] - a[1]).map(([p, count]) => (
-                    <BreakdownRow key={p} label={PLATFORM_CONFIG[p]?.label ?? p}
-                      count={count} total={posts.length} color={PLATFORM_CONFIG[p]?.color ?? 'bg-muted-foreground'} />
-                  ))
-                )}
-              </SideSection>
-              <div className="border-t border-border/40 pt-3">
-                <SideSection title="Por plataforma · comentários">
-                  {Object.keys(platformEngagement).length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">Sem dados</p>
-                  ) : (
-                    Object.entries(platformEngagement).sort((a, b) => b[1] - a[1]).map(([p, count]) => (
-                      <BreakdownRow key={p} label={PLATFORM_CONFIG[p]?.label ?? p}
-                        count={count} total={totalComments} color={PLATFORM_CONFIG[p]?.color ?? 'bg-muted-foreground'}
-                        extra={count >= 1000 ? `${(count/1000).toFixed(1)}k` : undefined} />
-                    ))
-                  )}
-                </SideSection>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 6. Status editorial */}
+          {/* 5. Status editorial */}
           <Card className="border-border/60">
             <CardContent className="p-4">
               <SideSection title="Status editorial"
@@ -816,75 +781,6 @@ export default function Radar() {
             </Card>
           )}
 
-          {/* 8. Post mais recente */}
-          {mostRecent && !loading && (
-            <Card className="border-border/60">
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
-                  <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest">Mais recente</p>
-                </div>
-                <p className="text-xs text-foreground/80 leading-snug line-clamp-2">
-                  {mostRecent.text || <span className="italic text-muted-foreground">Sem legenda</span>}
-                </p>
-                <p className="text-[10px] text-muted-foreground/50">
-                  {formatDistanceToNow(mostRecent.publishedAt.toDate(), { addSuffix: true, locale: ptBR })}
-                  {' · '}{PLATFORM_CONFIG[mostRecent.platform]?.label ?? mostRecent.platform}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 9. Top palavras (chips com freq) */}
-          {topWords.length > 0 && (
-            <Card className="border-border/60">
-              <CardContent className="p-4">
-                <SideSection title={`Palavras em destaque · ${CLOUD_PERIODS.find(c => c.value === cloudPeriod)?.label}`}>
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {topWords.map(([word, freq]) => (
-                      <span key={word}
-                        className="px-2 py-1 rounded-md bg-secondary border border-border/60 text-xs text-foreground/80 font-medium flex items-center gap-1.5">
-                        {word}
-                        <span className="text-[9px] text-muted-foreground/60 font-mono bg-background/50 rounded px-0.5">{freq}×</span>
-                      </span>
-                    ))}
-                  </div>
-                </SideSection>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 10. Nuvem compacta */}
-          <Card className="border-border/60">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest">Nuvem · comentários</p>
-                <div className="flex gap-1">
-                  {CLOUD_PERIODS.map(({ value, label }) => (
-                    <button key={value} onClick={() => setCloudPeriod(value)}
-                      className={cn('text-[10px] px-1.5 py-0.5 rounded transition-colors',
-                        cloudPeriod === value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground')}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <WordCloud texts={cloudTexts} loading={cloudLoading} />
-            </CardContent>
-          </Card>
-
-          {/* 11. Instagram Insights */}
-          <Card className="border-pink-500/20 bg-gradient-to-b from-pink-500/3 to-transparent">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-1.5 mb-3">
-                <div className="w-4 h-4 rounded-sm bg-gradient-to-br from-pink-400 via-purple-400 to-orange-400 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[8px] text-white font-bold">IG</span>
-                </div>
-                <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest">Instagram Insights</p>
-              </div>
-              <InstagramInsightsPanel />
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

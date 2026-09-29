@@ -37,10 +37,10 @@ export async function getPosts(filters: RadarFilters, account: RadarAccount = 'i
     constraints.push(where('platform', '==', filters.platform as SocialPlatform))
   }
 
-  // Para imiranteesporte filtra pelo campo account.
-  // Para imirante não filtra (inclui posts sem campo account = dados históricos).
-  if (account === 'imiranteesporte') {
-    constraints.push(where('account', '==', 'imiranteesporte'))
+  // imirante: sem filtro de account para incluir dados históricos sem o campo.
+  // Todas as demais contas filtram explicitamente pelo campo account.
+  if (account !== 'imirante') {
+    constraints.push(where('account', '==', account))
   }
 
   const q = query(collection(db, 'posts'), ...constraints)
@@ -101,12 +101,16 @@ const TIME_CUTOFFS: Record<string, number | null> = {
   all:  null,
 }
 
-export async function getOpportunities(filters: RadarFilters): Promise<Opportunity[]> {
+export async function getOpportunities(filters: RadarFilters, account: RadarAccount = 'imirante'): Promise<Opportunity[]> {
   // Sem orderBy — evita excluir documentos sem o campo indexado.
   const constraints = []
 
   if (filters.platform !== 'all') {
     constraints.push(where('platform', '==', filters.platform as SocialPlatform))
+  }
+
+  if (account !== 'imirante') {
+    constraints.push(where('account', '==', account))
   }
 
   const q = query(collection(db, 'opportunities'), ...constraints)

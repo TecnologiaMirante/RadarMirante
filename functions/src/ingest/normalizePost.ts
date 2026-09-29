@@ -14,6 +14,7 @@ export async function normalizeAndSavePost(
   db: admin.firestore.Firestore,
   platform: SocialPlatform,
   raw: RawPost,
+  account = 'imirante',
 ): Promise<{ postId: string; isNew: boolean }> {
   const postsRef = db.collection('posts')
 
@@ -38,6 +39,7 @@ export async function normalizeAndSavePost(
   const now = FieldValue.serverTimestamp()
   const newPost: Omit<RadarPost, 'id'> = {
     externalId: raw.externalId,
+    account,
     platform,
     url: raw.url,
     ...(raw.title ? { title: raw.title } : {}),

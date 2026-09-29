@@ -2,23 +2,27 @@ import * as admin from 'firebase-admin'
 import type {
   Opportunity,
   EditorialAnalysis,
+  ViralAnalysis,
   RadarPost,
   OpportunityStatus,
+  AccountProfile,
 } from '../types/radar'
 
 const FieldValue = admin.firestore.FieldValue
 
-// ─── Criação e atualização de Opportunities ───────────────────────────────────
+function isViralAnalysis(a: EditorialAnalysis | ViralAnalysis): a is ViralAnalysis {
+  return 'viralPotential' in a
+}
 
 export async function createOrUpdateOpportunity(
   db: admin.firestore.Firestore,
   post: RadarPost & { id: string },
-  analysis: EditorialAnalysis,
+  analysis: EditorialAnalysis | ViralAnalysis,
   trendScore: number,
   trendConfidence: number,
   baselineComparison: number,
+  profile: AccountProfile = 'editorial',
 ): Promise<string> {
-  // Verifica se já existe opportunity para este post
   const existing = await db
     .collection('opportunities')
     .where('postId', '==', post.id)
@@ -27,42 +31,52 @@ export async function createOrUpdateOpportunity(
 
   const now = FieldValue.serverTimestamp()
 
-  const opportunityData: Omit<Opportunity, 'id' | 'createdAt'> = {
+  const base: Omit<Opportunity, 'id' | 'createdAt'> = {
     postId: post.id,
+    account: post.account,
+    profile,
     platform: post.platform,
     postUrl: post.url,
     ...(post.title ? { postTitle: post.title } : {}),
-
     mainTopic: analysis.mainTopic,
     summary: analysis.summary,
     whyTrending: analysis.whyTrending,
     clusters: analysis.clusters,
-    audienceQuestions: analysis.audienceQuestions,
-    complaints: analysis.complaints,
-    reports: analysis.reports,
-    claimsToVerify: analysis.claimsToVerify,
-    editorialSignals: analysis.editorialSignals,
-    storyIdeas: analysis.storyIdeas,
-
     trendScore,
     trendConfidence,
-    editorialPotential: analysis.editorialPotential,
     analysisConfidence: analysis.confidence,
-
     commentsAtAnalysis: post.metrics.comments,
     metricsAtAnalysis: post.metrics,
     baselineComparison,
-
     status: 'new' as OpportunityStatus,
     updatedAt: now as unknown as admin.firestore.Timestamp,
     lastAnalysisAt: now as unknown as admin.firestore.Timestamp,
   }
 
+  const profileFields = isViralAnalysis(analysis)
+    ? {
+      emotionalTriggers: analysis.emotionalTriggers,
+      contentInsights: analysis.contentInsights,
+      audienceSignals: analysis.audienceSignals,
+      contentRecommendations: analysis.contentRecommendations,
+      viralPotential: analysis.viralPotential,
+    }
+    : {
+      audienceQuestions: analysis.audienceQuestions,
+      complaints: analysis.complaints,
+      reports: analysis.reports,
+      claimsToVerify: analysis.claimsToVerify,
+      editorialSignals: analysis.editorialSignals,
+      storyIdeas: analysis.storyIdeas,
+      editorialPotential: analysis.editorialPotential,
+    }
+
+  const opportunityData = { ...base, ...profileFields }
+
   if (!existing.empty) {
     const ref = existing.docs[0].ref
     await ref.update({
       ...opportunityData,
-      // Preserva status se já foi revisado
       ...(existing.docs[0].data().status !== 'new' ? { status: undefined } : {}),
     })
     return ref.id

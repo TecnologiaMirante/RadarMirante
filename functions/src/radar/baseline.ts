@@ -23,16 +23,22 @@ export async function getBaseline(
   db: admin.firestore.Firestore,
   platform: SocialPlatform,
   bucket: BaselineBucket,
+  account?: string,
 ): Promise<BaselineStats | null> {
-  // Documento com id determinístico: `${platform}_${bucket}`
-  const id = `${platform}_${bucket.replace('-', '_')}`
-  const doc = await db.collection(COLLECTION).doc(id).get()
-  if (!doc.exists) return null
+  // Tenta baseline específico da conta primeiro; cai para o global se não existir.
+  const bucketKey = bucket.replace(/-/g, '_')
+  const ids = account
+    ? [`${platform}_${account}_${bucketKey}`, `${platform}_${bucketKey}`]
+    : [`${platform}_${bucketKey}`]
 
-  const data = doc.data() as BaselineStats
-  if (data.sampleSize < RADAR_CONFIG.baseline.minSamplesForBaseline) return null
+  for (const id of ids) {
+    const doc = await db.collection(COLLECTION).doc(id).get()
+    if (!doc.exists) continue
+    const data = doc.data() as BaselineStats
+    if (data.sampleSize >= RADAR_CONFIG.baseline.minSamplesForBaseline) return data
+  }
 
-  return data
+  return null
 }
 
 export function percentile(values: number[], p: number): number {

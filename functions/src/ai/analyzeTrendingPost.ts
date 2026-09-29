@@ -1,7 +1,9 @@
 import OpenAI from 'openai'
-import type { EditorialAnalysis, RadarPost, RadarSnapshot } from '../types/radar'
+import type { EditorialAnalysis, RadarPost, RadarSnapshot, AccountProfile } from '../types/radar'
 import { EDITORIAL_RADAR_SYSTEM_PROMPT } from './prompts/editorialRadar'
-import { EDITORIAL_ANALYSIS_JSON_SCHEMA, validateAnalysis } from './schemas'
+import {
+  EDITORIAL_ANALYSIS_JSON_SCHEMA, validateAnalysis,
+} from './schemas'
 import { sampleComments, formatCommentsForAI } from '../radar/sampling'
 
 export interface AnalysisInput {
@@ -10,6 +12,7 @@ export interface AnalysisInput {
   trendScore: number
   baselineComparison: number
   comments: import('../types/radar').RadarComment[]
+  profile?: AccountProfile
 }
 
 function getOpenAI(apiKey: string): OpenAI {
@@ -59,7 +62,7 @@ export async function analyzeTrendingPost(
   const openai = getOpenAI(apiKey)
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4.1-nano',
     response_format: {
       type: 'json_schema',
       json_schema: {

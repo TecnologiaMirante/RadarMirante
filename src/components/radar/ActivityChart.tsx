@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import {
-  ComposedChart, Bar, Area, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid,
+  BarChart, Bar, Cell, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import type { RadarPost } from '@/types/radar'
 import type { TimeFilter } from '@/types/radar'
@@ -97,7 +97,6 @@ function buildAllSlots(posts: RadarPost[]): ChartSlot[] {
     let label: string
 
     if (totalDays > 60) {
-      // Semanas
       const monday = new Date(d)
       monday.setDate(d.getDate() - ((d.getDay() + 6) % 7))
       monday.setHours(0, 0, 0, 0)
@@ -149,26 +148,27 @@ function xInterval(slotCount: number): number {
 
 const CustomTooltip = ({ active, payload, label }: {
   active?: boolean
-  payload?: { value: number; dataKey: string }[]
+  payload?: { payload?: ChartSlot }[]
   label?: string
 }) => {
   if (!active || !payload?.length) return null
-  const comments = payload.find(p => p.dataKey === 'comments')?.value ?? 0
-  const likes    = payload.find(p => p.dataKey === 'likes')?.value ?? 0
-  const posts    = payload.find(p => p.dataKey === 'posts')?.value ?? 0
-  const trending = payload.find(p => p.dataKey === 'trending')?.value ?? 0
-  const total    = comments + likes
-  const avgComt  = posts > 0 ? Math.round(comments / posts) : 0
-  const trendPct = posts > 0 ? Math.round((trending / posts) * 100) : 0
+  const slot      = payload[0]?.payload
+  if (!slot) return null
+  const comments  = slot.comments
+  const likes     = slot.likes
+  const posts     = slot.posts
+  const trending  = slot.trending
+  const avgComt   = posts > 0 ? Math.round(comments / posts) : 0
+  const trendPct  = posts > 0 ? Math.round((trending / posts) * 100) : 0
 
   return (
-    <div className="bg-popover border border-border rounded-lg p-3 shadow-xl text-xs space-y-1.5 min-w-48">
+    <div className="bg-popover border border-border rounded-lg p-3 shadow-xl text-xs space-y-1.5 min-w-44">
       <p className="font-bold text-foreground text-sm capitalize">{label}</p>
       <div className="space-y-1 pt-1 border-t border-border/50">
         {posts > 0 && (
           <div className="flex items-center justify-between gap-4">
             <span className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="w-2 h-2 rounded-sm bg-primary/50" />publicações
+              <span className="w-2 h-2 rounded-sm bg-muted-foreground/40" />publicações
             </span>
             <span className="font-bold text-foreground">{posts}</span>
           </div>
@@ -184,7 +184,7 @@ const CustomTooltip = ({ active, payload, label }: {
         {avgComt > 0 && (
           <div className="flex items-center justify-between gap-4">
             <span className="text-muted-foreground/70 pl-3.5">média/post</span>
-            <span className="font-semibold text-primary/70">~{avgComt.toLocaleString('pt-BR')}</span>
+            <span className="font-semibold text-primary/70">~{avgComt}</span>
           </div>
         )}
         {likes > 0 && (
@@ -198,15 +198,9 @@ const CustomTooltip = ({ active, payload, label }: {
         {trending > 0 && (
           <div className="flex items-center justify-between gap-4 pt-1 border-t border-border/50">
             <span className="flex items-center gap-1.5 text-red-400">
-              <span className="w-2 h-2 rounded-full bg-red-500 dot-blink" />repercutindo
+              <span className="w-2 h-2 rounded-full bg-red-500" />repercutindo
             </span>
             <span className="font-bold text-red-400">{trending} <span className="font-normal opacity-70">({trendPct}%)</span></span>
-          </div>
-        )}
-        {total > 0 && (
-          <div className="flex items-center justify-between gap-4 pt-1 border-t border-border/50">
-            <span className="text-muted-foreground/70">engajamento total</span>
-            <span className="font-bold text-foreground">{total.toLocaleString('pt-BR')}</span>
           </div>
         )}
       </div>
@@ -219,22 +213,31 @@ const CustomTooltip = ({ active, payload, label }: {
 export function ActivityChart({ posts, loading, timeFilter = 'all' }: ActivityChartProps) {
   const data = useMemo(() => buildChartData(posts, timeFilter), [posts, timeFilter])
   const hasData = data.some(d => d.comments + d.posts > 0)
-  const maxComments = Math.max(...data.map(d => d.comments), 1)
-  const maxPosts    = Math.max(...data.map(d => d.posts), 1)
 
-  const isHourly = ['now', '3h', '6h', '24h'].includes(timeFilter)
-  const unitLabel = isHourly ? 'hora' : 'dia'
+  const totalComments = data.reduce((sum, d) => sum + d.comments, 0)
+  const maxComments   = Math.max(...data.map(d => d.comments), 1)
+  const avgSlot       = data.length > 0 ? Math.round(totalComments / data.length) : 0
 
   if (loading) {
     return (
-      <div className="h-36 flex items-end gap-0.5 px-2 pb-2">
-        {Array.from({ length: 24 }).map((_, i) => (
-          <div
-            key={i}
-            className="flex-1 bg-secondary/70 rounded-t animate-pulse"
-            style={{ height: `${15 + (Math.sin(i * 0.7) + 1) * 35}%`, animationDelay: `${i * 40}ms` }}
-          />
-        ))}
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-4 px-1">
+          {[40, 28, 36].map((w, i) => (
+            <div key={i} className="flex flex-col gap-1">
+              <div className="h-2 bg-secondary/60 rounded animate-pulse" style={{ width: w }} />
+              <div className="h-4 bg-secondary/80 rounded animate-pulse" style={{ width: w + 8 }} />
+            </div>
+          ))}
+        </div>
+        <div className="h-24 flex items-end gap-0.5 px-1">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 bg-secondary/50 rounded-t animate-pulse"
+              style={{ height: `${20 + (Math.sin(i * 0.8) + 1) * 40}%`, animationDelay: `${i * 40}ms` }}
+            />
+          ))}
+        </div>
       </div>
     )
   }
@@ -249,72 +252,41 @@ export function ActivityChart({ posts, loading, timeFilter = 'all' }: ActivityCh
   }
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-4 text-[10px] text-muted-foreground/70">
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-1.5 rounded bg-primary/70 inline-block" />comentários
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-1.5 rounded bg-pink-400/50 inline-block" />reações
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm border border-primary/40 bg-primary/10 inline-block" />posts
-        </span>
-      </div>
-      <ResponsiveContainer width="100%" height={140}>
-        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-          <defs>
-            <linearGradient id="gradComments" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="hsl(210 100% 56%)" stopOpacity={0.4} />
-              <stop offset="95%" stopColor="hsl(210 100% 56%)" stopOpacity={0.02} />
-            </linearGradient>
-            <linearGradient id="gradLikes" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#f472b6" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#f472b6" stopOpacity={0.01} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="2 4" stroke="rgba(128,128,128,0.08)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 9, fill: 'hsl(215 15% 50%)' }}
-            tickLine={false}
-            axisLine={false}
-            interval={xInterval(data.length)}
+    <ResponsiveContainer width="100%" height={140}>
+      <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap="18%">
+        <XAxis
+          dataKey="label"
+          tick={{ fontSize: 9, fill: 'hsl(215 15% 45%)' }}
+          tickLine={false}
+          axisLine={false}
+          interval={xInterval(data.length)}
+        />
+        <YAxis hide domain={[0, maxComments * 1.2]} />
+
+        {avgSlot > 0 && (
+          <ReferenceLine
+            y={avgSlot}
+            stroke="hsl(215 15% 55%)"
+            strokeOpacity={0.25}
+            strokeDasharray="4 4"
           />
-          <YAxis
-            yAxisId="eng"
-            orientation="left"
-            tick={{ fontSize: 9, fill: 'hsl(215 15% 50%)' }}
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-            width={32}
-            tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
-          />
-          <YAxis
-            yAxisId="posts"
-            orientation="right"
-            tick={{ fontSize: 9, fill: 'hsl(215 15% 50%)' }}
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-            width={20}
-            domain={[0, Math.max(maxPosts * 2, 4)]}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar yAxisId="posts" dataKey="posts" fill="hsl(210 100% 56% / 0.18)"
-            stroke="hsl(210 100% 56% / 0.4)" strokeWidth={1} radius={[2, 2, 0, 0]} maxBarSize={14} />
-          <Area yAxisId="eng" type="monotone" dataKey="likes"
-            stroke="#f472b6" strokeWidth={1} fill="url(#gradLikes)" strokeDasharray="4 2" />
-          <Area yAxisId="eng" type="monotone" dataKey="comments"
-            stroke="hsl(210 100% 56%)" strokeWidth={2} fill="url(#gradComments)" />
-        </ComposedChart>
-      </ResponsiveContainer>
-      {maxComments > 0 && (
-        <p className="text-[10px] text-muted-foreground/50 text-right">
-          pico de {maxComments.toLocaleString('pt-BR')} comentários por {unitLabel}
-        </p>
-      )}
-    </div>
+        )}
+
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(215 15% 50% / 0.06)' }} />
+
+        <Bar dataKey="comments" radius={[3, 3, 0, 0]} maxBarSize={28}>
+          {data.map((slot) => {
+            const isPeak = slot.comments === maxComments && slot.comments > 0
+            return (
+              <Cell
+                key={slot.key}
+                fill="hsl(210 80% 58%)"
+                fillOpacity={isPeak ? 0.9 : 0.4}
+              />
+            )
+          })}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   )
 }

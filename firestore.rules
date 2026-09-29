@@ -154,9 +154,24 @@ service cloud.firestore {
 
     // ─── Instagram Insights ───────────────────────────────────────────────────
 
-    match /instagramAccount/{docId} {
+    match /instagramAccount/{accountId} {
       allow read: if isMiranteUser();
       allow write: if false;
+
+      match /insights/{insightId} {
+        allow read: if isMiranteUser();
+        allow write: if false;
+      }
+
+      match /onlineFollowers/{followersId} {
+        allow read: if isMiranteUser();
+        allow write: if false;
+      }
+
+      match /audience/{audienceId} {
+        allow read: if isMiranteUser();
+        allow write: if false;
+      }
     }
 
     match /instagramInsights/{docId} {

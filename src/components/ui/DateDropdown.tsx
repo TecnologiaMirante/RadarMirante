@@ -18,8 +18,9 @@ export const TIME_FILTER_PRESETS: {
   { value: 'all',  label: 'Desde 15/09',    short: '15/09', group: 'Histórico' },
 ]
 
-export function getPresetLabel(value: TimeFilter, customFrom?: number, customTo?: number): string {
+export function getPresetLabel(value: TimeFilter, customFrom?: number, customTo?: number, overrideAllLabel?: string): string {
   if (value === 'custom') return customLabel(customFrom, customTo)
+  if (value === 'all' && overrideAllLabel) return overrideAllLabel
   return TIME_FILTER_PRESETS.find(p => p.value === value)?.label ?? value
 }
 
@@ -56,12 +57,14 @@ export function DateDropdown({
   customTo,
   onChange,
   align = 'right',
+  overrideAllLabel,
 }: {
   value: TimeFilter
   customFrom?: number
   customTo?: number
   onChange: (time: TimeFilter, customFrom?: number, customTo?: number) => void
   align?: 'left' | 'right'
+  overrideAllLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const [fromVal, setFromVal] = useState(msToInput(customFrom))
@@ -82,9 +85,13 @@ export function DateDropdown({
 
   const buttonLabel = value === 'custom'
     ? customLabel(customFrom, customTo)
-    : getPresetLabel(value)
+    : getPresetLabel(value, undefined, undefined, overrideAllLabel)
 
-  const groups = Array.from(new Set(TIME_FILTER_PRESETS.map(p => p.group)))
+  const effectivePresets = overrideAllLabel
+    ? TIME_FILTER_PRESETS.map(p => p.value === 'all' ? { ...p, label: overrideAllLabel } : p)
+    : TIME_FILTER_PRESETS
+
+  const groups = Array.from(new Set(effectivePresets.map(p => p.group)))
 
   function applyCustom() {
     const from = inputToMs(fromVal)
@@ -120,7 +127,7 @@ export function DateDropdown({
               <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-3 pt-2 pb-1">
                 {group}
               </p>
-              {TIME_FILTER_PRESETS.filter(p => p.group === group).map(p => (
+              {effectivePresets.filter(p => p.group === group).map(p => (
                 <button
                   key={p.value}
                   onClick={() => { onChange(p.value); setOpen(false) }}

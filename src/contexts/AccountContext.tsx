@@ -3,6 +3,8 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import { useAuth } from '@/hooks/useAuth'
 
+export type AccountProfile = 'editorial' | 'viral'
+
 export interface RadarAccountConfig {
   id: string
   displayName: string
@@ -11,6 +13,7 @@ export interface RadarAccountConfig {
   active: boolean
   emProducao: boolean
   order: number
+  profile: AccountProfile
 }
 
 export type RadarAccount = string
@@ -18,16 +21,13 @@ export type RadarAccount = string
 // Static fallback data for known accounts — used while Firestore loads
 // and as backward-compat exports for existing consumers
 const STATIC_ACCOUNTS: RadarAccountConfig[] = [
-  { id: 'imirante', displayName: '@imirante', shortName: 'Imirante', color: '#38B6FF', active: true, emProducao: false, order: 0 },
-  { id: 'imiranteesporte', displayName: '@imiranteesporte', shortName: 'Esporte', color: '#91BD32', active: true, emProducao: true, order: 1 },
+  { id: 'imirante',        displayName: '@imirante',        shortName: 'iMirante', color: '#38B6FF', active: true,  emProducao: false, order: 0, profile: 'editorial' },
+  { id: 'imiranteesporte', displayName: '@imiranteesporte', shortName: 'Esporte',  color: '#91BD32', active: true,  emProducao: true,  order: 1, profile: 'editorial' },
+  { id: 'tvmirante',       displayName: '@tvmirante',       shortName: 'TV',       color: '#0049AF', active: true,  emProducao: true,  order: 2, profile: 'viral'     },
 ]
 
-// Legacy static exports kept for existing consumers (Radar, WordCloud, Sidebar, etc.)
-export const ACCOUNT_LABELS: Record<string, string> = { imirante: '@imirante', imiranteesporte: '@imiranteesporte' }
-export const ACCOUNT_SHORT_LABELS: Record<string, string> = { imirante: 'Imirante', imiranteesporte: 'Esporte' }
-export const ACCOUNT_COLORS: Record<string, string> = { imirante: '#38B6FF', imiranteesporte: '#91BD32' }
-export const ACCOUNT_PAGE_TITLES: Record<string, string> = { imirante: 'Radar Imirante', imiranteesporte: 'Radar Imirante Esporte' }
-export const RADAR_ACCOUNTS: string[] = ['imirante', 'imiranteesporte']
+export const ACCOUNT_COLORS: Record<string, string> = { imirante: '#38B6FF', imiranteesporte: '#91BD32', tvmirante: '#0049AF' }
+export const ACCOUNT_PAGE_TITLES: Record<string, string> = { imirante: 'Radar iMirante', imiranteesporte: 'Radar Esporte', tvmirante: 'Radar TV Mirante' }
 
 interface AccountContextValue {
   account: string
@@ -56,17 +56,21 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [firestoreReady, setFirestoreReady] = useState(false)
   const [account, setAccountState] = useState<string>(getSavedAccount)
 
-  // Load all radar accounts from Firestore (falls back to static if collection is empty)
+  // Merge Firestore accounts with static — Firestore overrides fields, static defines the baseline.
+  // New accounts added to STATIC_ACCOUNTS appear immediately without needing a seed script.
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, 'radarAccounts'),
       (snap) => {
-        if (!snap.empty) {
-          const loaded = snap.docs
-            .map(d => ({ id: d.id, ...d.data() } as RadarAccountConfig))
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          setAllAccounts(loaded)
-        }
+        const firestoreById: Record<string, Partial<RadarAccountConfig>> = {}
+        snap.docs.forEach(d => { firestoreById[d.id] = d.data() as Partial<RadarAccountConfig> })
+
+        const merged = STATIC_ACCOUNTS.map(s => ({
+          ...s,
+          ...(firestoreById[s.id] ?? {}),
+        })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+        setAllAccounts(merged)
         setFirestoreReady(true)
       },
       () => { setFirestoreReady(true) },

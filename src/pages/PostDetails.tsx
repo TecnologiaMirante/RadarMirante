@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Heart, Share2, Eye,
   Clock, Sparkles, FileText, ChevronDown, ChevronUp,
-  AlertTriangle, RefreshCw, TrendingUp, Zap, Users,
-  CheckCircle2, HelpCircle, BookOpen, ArrowUpRight,
+  AlertTriangle, RefreshCw, TrendingUp, Zap,
+  HelpCircle, BookOpen, ArrowUpRight,
+  Instagram, ExternalLink,
 } from 'lucide-react'
 import { InfoTip } from '@/components/ui/InfoTip'
 import { formatDistanceToNow } from 'date-fns'
@@ -14,10 +15,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ScoreBadge } from '@/components/radar/ScoreBadge'
 import { PlatformBadge } from '@/components/radar/PlatformBadge'
 import {
-  getPost, getPostOpportunity, submitFeedback,
+  getPost, getPostOpportunity,
   triggerPostAnalysis, getPostComments,
 } from '@/services/radar'
-import { useAuth } from '@/hooks/useAuth'
 import type {
   RadarPost, Opportunity, RadarComment, StoryIdea,
   TopicCluster, ClaimToVerify,
@@ -61,9 +61,9 @@ function ClaimCard({ claim }: { claim: ClaimToVerify }) {
 }
 
 const PRIORITY_STYLES = {
-  high:   { border: 'border-l-orange-400',  badge: 'bg-orange-400/10 text-orange-400',   label: 'URGENTE'   },
-  medium: { border: 'border-l-primary',     badge: 'bg-primary/10 text-primary',         label: 'RELEVANTE' },
-  low:    { border: 'border-l-border',      badge: 'bg-secondary text-muted-foreground', label: 'MONITORE'  },
+  high: { border: 'border-l-orange-400', badge: 'bg-orange-400/10 text-orange-400', label: 'URGENTE' },
+  medium: { border: 'border-l-primary', badge: 'bg-primary/10 text-primary', label: 'RELEVANTE' },
+  low: { border: 'border-l-border', badge: 'bg-secondary text-muted-foreground', label: 'MONITORE' },
 }
 
 function StoryIdeaCard({ idea, index }: { idea: StoryIdea; index: number }) {
@@ -118,43 +118,98 @@ function StoryIdeaCard({ idea, index }: { idea: StoryIdea; index: number }) {
   )
 }
 
-function FeedbackBar({ opportunityId, userId }: { opportunityId: string; userId: string }) {
-  const [sent, setSent] = useState<boolean | null>(null)
-  const [loading, setLoading] = useState(false)
+// ─── Instagram Preview ────────────────────────────────────────────────────────
 
-  async function send(useful: boolean) {
-    if (sent !== null || loading) return
-    setLoading(true)
-    try { await submitFeedback(opportunityId, userId, useful); setSent(useful) }
-    catch (err) { console.error('[Feedback]', err) }
-    finally { setLoading(false) }
+function isInstagramUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return /(^|\.)instagram\.com$/i.test(parsed.hostname)
+  } catch {
+    return false
   }
+}
 
-  if (sent !== null) {
-    return <p className="text-xs text-muted-foreground text-center py-2">{sent ? '👍 Obrigado pelo feedback!' : '👎 Feedback registrado.'}</p>
+function getInstagramEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    if (!/(^|\.)instagram\.com$/i.test(parsed.hostname)) return null
+
+    const parts = parsed.pathname.split('/').filter(Boolean)
+    const type = parts[0]
+    const shortcode = parts[1]
+    if (!shortcode || !['p', 'reel', 'tv'].includes(type)) return null
+
+    return `https://www.instagram.com/${type}/${shortcode}/embed/captioned/`
+  } catch {
+    return null
   }
+}
+
+function InstagramPreview({ post, compact = false }: { post: RadarPost; compact?: boolean }) {
+  const embedUrl = post.platform === 'instagram' ? getInstagramEmbedUrl(post.url) : null
+  const canEmbed = Boolean(embedUrl) && isInstagramUrl(post.url)
+
   return (
-    <div className="flex items-center justify-center gap-3">
-      <p className="text-xs text-muted-foreground">Esta análise foi útil?</p>
-      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void send(true)} disabled={loading}>👍 Sim</Button>
-      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void send(false)} disabled={loading}>👎 Não</Button>
-    </div>
+    <Card className="border-border/60 overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-8 h-8 rounded-md bg-gradient-to-br from-pink-500/20 via-primary/15 to-orange-400/20 border border-pink-400/20 flex items-center justify-center flex-shrink-0">
+              <Instagram className="w-4 h-4 text-pink-300" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground">Publicação original</p>
+              <p className="text-[11px] text-muted-foreground truncate">Preview do Instagram</p>
+            </div>
+          </div>
+          <a
+            href={post.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-8 h-8 rounded-md border border-border/60 text-muted-foreground hover:text-primary hover:border-primary/40 flex items-center justify-center transition-colors flex-shrink-0"
+            title="Abrir no Instagram"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+
+        {canEmbed && embedUrl ? (
+          <div className="bg-white overflow-hidden">
+            <iframe
+              title="Preview da publicação no Instagram"
+              src={embedUrl}
+              className={cn('block w-full border-0 bg-white', compact ? 'h-[520px]' : 'h-[560px]')}
+              loading="lazy"
+              allowTransparency
+            />
+          </div>
+        ) : (
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              O preview incorporado está disponível para publicações do Instagram. Para este item, use o link externo.
+            </p>
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <a href={post.url} target="_blank" rel="noopener noreferrer">
+                Abrir publicação <ArrowUpRight className="w-3.5 h-3.5" />
+              </a>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
 // ─── Copiloto Sidebar Panel ───────────────────────────────────────────────────
 
 function CopilotoPanel({
-  opportunity, analyzing, analyzeError, onAnalyze, userId, postId,
+  opportunity, analyzing, analyzeError, onAnalyze,
 }: {
   opportunity: Opportunity | null
   analyzing: boolean
   analyzeError: string | null
   onAnalyze: () => void
-  userId: string
-  postId: string
 }) {
-  void postId
 
   if (!opportunity && !analyzing) {
     return (
@@ -200,7 +255,7 @@ function CopilotoPanel({
 
   if (!opportunity) return null
 
-  const highIdeas  = opportunity.storyIdeas?.filter(i => i.priority === 'high').length ?? 0
+  const highIdeas = opportunity.storyIdeas?.filter(i => i.priority === 'high').length ?? 0
   const totalIdeas = opportunity.storyIdeas?.length ?? 0
 
   return (
@@ -237,35 +292,10 @@ function CopilotoPanel({
               {opportunity.whyTrending}
             </p>
           )}
-          {/* Editorial potential */}
-          <div className="pt-1 space-y-1">
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-muted-foreground/60">Potencial editorial</span>
-              <span className={cn('font-bold',
-                opportunity.editorialPotential >= 75 ? 'text-green-400' :
-                opportunity.editorialPotential >= 50 ? 'text-primary' : 'text-yellow-400'
-              )}>
-                {opportunity.editorialPotential}/100
-              </span>
-            </div>
-            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all duration-700',
-                  opportunity.editorialPotential >= 75 ? 'bg-green-400' :
-                  opportunity.editorialPotential >= 50 ? 'bg-primary' : 'bg-yellow-400'
-                )}
-                style={{ width: `${opportunity.editorialPotential}%` }}
-              />
-            </div>
-          </div>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground/60 pt-0.5">
             <span className="flex items-center gap-1">
               <TrendingUp className="w-2.5 h-2.5" />
               Score: <strong className="text-foreground ml-0.5">{opportunity.trendScore}</strong>
-            </span>
-            <span className="flex items-center gap-1">
-              <Users className="w-2.5 h-2.5" />
-              Confiança: <strong className="text-foreground ml-0.5">{Math.round(opportunity.analysisConfidence * 100)}%</strong>
             </span>
           </div>
         </CardContent>
@@ -289,9 +319,9 @@ function CopilotoPanel({
                 <div key={i} className="flex items-start gap-2">
                   <span className={cn(
                     'text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5 whitespace-nowrap',
-                    idea.priority === 'high'   ? 'bg-orange-500/15 text-orange-400' :
-                    idea.priority === 'medium' ? 'bg-primary/10 text-primary' :
-                    'bg-secondary text-muted-foreground'
+                    idea.priority === 'high' ? 'bg-orange-500/15 text-orange-400' :
+                      idea.priority === 'medium' ? 'bg-primary/10 text-primary' :
+                        'bg-secondary text-muted-foreground'
                   )}>
                     {idea.priority === 'high' ? 'URG.' : idea.priority === 'medium' ? 'REL.' : 'MON.'}
                   </span>
@@ -345,10 +375,6 @@ function CopilotoPanel({
         </Card>
       )}
 
-      {/* Feedback */}
-      <div className="pt-1">
-        <FeedbackBar opportunityId={opportunity.id} userId={userId} />
-      </div>
     </div>
   )
 }
@@ -356,8 +382,8 @@ function CopilotoPanel({
 // ─── Tab: Comentários ─────────────────────────────────────────────────────────
 
 const AVATAR_PALETTE = [
-  '#6366f1','#8b5cf6','#ec4899','#06b6d4',
-  '#10b981','#f59e0b','#f97316','#3b82f6',
+  '#6366f1', '#8b5cf6', '#ec4899', '#06b6d4',
+  '#10b981', '#f59e0b', '#f97316', '#3b82f6',
 ]
 
 function avatarColor(authorHash: string): string {
@@ -470,16 +496,13 @@ function CommentsTab({ comments, loading }: { comments: RadarComment[]; loading:
 // ─── Tab: Análise editorial ───────────────────────────────────────────────────
 
 function AnalysisTab({
-  opportunity, postId, analyzing, analyzeError, onAnalyze, userId,
+  opportunity, analyzing, analyzeError, onAnalyze,
 }: {
   opportunity: Opportunity | null
-  postId: string
   analyzing: boolean
   analyzeError: string | null
   onAnalyze: () => void
-  userId: string
 }) {
-  void postId
 
   if (!opportunity) {
     return (
@@ -648,18 +671,6 @@ function AnalysisTab({
         </div>
       )}
 
-      {/* Rodapé */}
-      <div className="pt-3 border-t border-border space-y-3">
-        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 className="w-3.5 h-3.5 text-green-400/70" />
-          <span>
-            Confiança: <strong className="text-foreground">{Math.round(opportunity.analysisConfidence * 100)}%</strong>
-            {' · '}
-            Potencial: <strong className="text-foreground">{opportunity.editorialPotential}/100</strong>
-          </span>
-        </div>
-        <FeedbackBar opportunityId={opportunity.id} userId={userId} />
-      </div>
     </div>
   )
 }
@@ -668,11 +679,11 @@ function AnalysisTab({
 
 function PostHeader({ post, publishedAgo }: { post: RadarPost; publishedAgo: string }) {
   const statusConfig: Record<string, { label: string; class: string }> = {
-    trending:   { label: 'Repercutindo',  class: 'bg-red-500/15 text-red-400 border-red-500/30' },
-    candidate:  { label: 'Aquecendo',     class: 'bg-primary/10 text-primary border-primary/20' },
-    monitoring: { label: 'Monitorando',   class: 'bg-secondary text-muted-foreground border-border' },
-    analyzed:   { label: 'Analisado',     class: 'bg-green-500/10 text-green-400 border-green-500/20' },
-    archived:   { label: 'Arquivado',     class: 'bg-secondary text-muted-foreground/60 border-border' },
+    trending: { label: 'Repercutindo', class: 'bg-red-500/15 text-red-400 border-red-500/30' },
+    candidate: { label: 'Aquecendo', class: 'bg-primary/10 text-primary border-primary/20' },
+    monitoring: { label: 'Monitorando', class: 'bg-secondary text-muted-foreground border-border' },
+    analyzed: { label: 'Analisado', class: 'bg-green-500/10 text-green-400 border-green-500/20' },
+    archived: { label: 'Arquivado', class: 'bg-secondary text-muted-foreground/60 border-border' },
   }
   const s = statusConfig[post.status] ?? statusConfig.monitoring
 
@@ -714,14 +725,6 @@ function PostHeader({ post, publishedAgo }: { post: RadarPost; publishedAgo: str
             <Metric icon={<Eye className="w-3.5 h-3.5" />}
               value={(post.metrics.views ?? 0).toLocaleString('pt-BR')} label="visualizações" />
           )}
-          <a
-            href={post.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-primary hover:underline ml-auto"
-          >
-            Ver publicação <ArrowUpRight className="w-3.5 h-3.5" />
-          </a>
         </div>
 
       </CardContent>
@@ -736,7 +739,6 @@ type Tab = 'analysis' | 'comments'
 export default function PostDetails() {
   const { postId } = useParams<{ postId: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   const [post, setPost] = useState<RadarPost | null>(null)
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null)
@@ -780,7 +782,7 @@ export default function PostDetails() {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="h-7 w-40 bg-card rounded" />
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5">
           <div className="space-y-4">
             <div className="h-36 bg-card rounded-xl" />
             <div className="h-10 bg-card rounded" />
@@ -818,11 +820,15 @@ export default function PostDetails() {
       </Button>
 
       {/* 2-column layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-5 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
 
         {/* ── Left: post content ── */}
         <div className="space-y-4">
           <PostHeader post={post} publishedAgo={publishedAgo} />
+
+          <div className="xl:hidden">
+            <InstagramPreview post={post} compact />
+          </div>
 
           {/* Tabs */}
           <div className="flex border-b border-border">
@@ -865,25 +871,31 @@ export default function PostDetails() {
             {tab === 'analysis' && (
               <AnalysisTab
                 opportunity={opportunity}
-                postId={postId ?? ''}
                 analyzing={analyzing}
                 analyzeError={analyzeError}
                 onAnalyze={() => void handleAnalyze()}
-                userId={user?.uid ?? ''}
               />
             )}
           </div>
+
+          <div className="xl:hidden">
+            <CopilotoPanel
+              opportunity={opportunity}
+              analyzing={analyzing}
+              analyzeError={analyzeError}
+              onAnalyze={() => void handleAnalyze()}
+            />
+          </div>
         </div>
 
-        {/* ── Right: Copiloto sticky panel ── */}
-        <div className="xl:sticky xl:top-4">
+        {/* ── Right: original post + Copiloto sticky panel ── */}
+        <div className="hidden xl:block xl:sticky xl:top-4 space-y-4">
+          <InstagramPreview post={post} />
           <CopilotoPanel
             opportunity={opportunity}
             analyzing={analyzing}
             analyzeError={analyzeError}
             onAnalyze={() => void handleAnalyze()}
-            userId={user?.uid ?? ''}
-            postId={postId ?? ''}
           />
         </div>
 

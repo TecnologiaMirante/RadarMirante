@@ -1,19 +1,23 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Activity, MessageCircle, Heart, TrendingUp, FileText,
-  Zap, BarChart2, Award, Eye, Clock,
+  Zap, BarChart2, Award, Clock, ArrowUpRight,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { WordCloud } from '@/components/radar/WordCloud'
 import { ActivityChart } from '@/components/radar/ActivityChart'
+import { InstagramInsightsPanel } from '@/components/radar/InstagramInsightsPanel'
 import { InfoTip } from '@/components/ui/InfoTip'
 import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
 import { useTimeFilter } from '@/hooks/useTimeFilter'
-import { getPosts, getPostComments } from '@/services/radar'
+import { getPosts, getRecentCommentTexts } from '@/services/radar'
+import { useAccount } from '@/contexts/AccountContext'
 import { cn } from '@/lib/utils'
 import type { Timestamp } from 'firebase/firestore'
 import type { RadarPost } from '@/types/radar'
 import { Link } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -131,6 +135,7 @@ function TopPostRow({ post, rank }: { post: RadarPost; rank: number }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { account } = useAccount()
   const [allPosts, setAllPosts] = useState<RadarPost[]>([])
   const [loading, setLoading] = useState(true)
   const { time: displayTime, customFrom, customTo, set: setDisplayTime } = useTimeFilter()
@@ -139,11 +144,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     setLoading(true)
-    getPosts({ platform: 'all', time: 'all', sort: 'recent' })
+    getPosts({ platform: 'all', time: 'all', sort: 'recent' }, account)
       .then(data => setAllPosts(data))
       .catch(err => console.error('[Dashboard]', err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [account])
 
   const posts = useMemo(() => {
     if (displayTime === 'custom') {
@@ -164,16 +169,14 @@ export default function Dashboard() {
   }, [allPosts, displayTime, customFrom, customTo])
 
   useEffect(() => {
-    if (posts.length === 0) { setCommentTexts([]); return }
     setCloudLoading(true)
-    const topPosts = [...posts]
-      .sort((a, b) => b.metrics.comments - a.metrics.comments)
-      .slice(0, 25)
-    Promise.all(topPosts.map(p => getPostComments(p.id, 100)))
-      .then(results => setCommentTexts(results.flat().map(c => c.text).filter(Boolean)))
+    const cutoff = TIME_MS[displayTime] ?? null
+    const sinceMs = cutoff !== null ? Date.now() - cutoff : Date.now() - 7 * 24 * 60 * 60 * 1000
+    getRecentCommentTexts(sinceMs)
+      .then(setCommentTexts)
       .catch(console.error)
       .finally(() => setCloudLoading(false))
-  }, [posts])
+  }, [displayTime])
 
   const trendingPosts  = useMemo(() => posts.filter(p => p.status === 'trending'),   [posts])
   const candidatePosts = useMemo(() => posts.filter(p => p.status === 'candidate'),  [posts])
@@ -190,13 +193,27 @@ export default function Dashboard() {
   const topByComments  = useMemo(() => [...posts].sort((a, b) => b.metrics.comments - a.metrics.comments), [posts])
   const top8           = topByComments.slice(0, 8)
 
-  const platformCounts = useMemo(() => posts.reduce<Record<string, number>>((acc, p) => {
-    acc[p.platform] = (acc[p.platform] ?? 0) + 1; return acc
-  }, {}), [posts])
+  const mostRecent = useMemo(() =>
+    allPosts.length > 0
+      ? [...allPosts].sort((a, b) =>
+          (b.publishedAt as unknown as Timestamp).toMillis() -
+          (a.publishedAt as unknown as Timestamp).toMillis()
+        )[0]
+      : null,
+    [allPosts])
 
-  const platformEngagement = useMemo(() => posts.reduce<Record<string, number>>((acc, p) => {
-    acc[p.platform] = (acc[p.platform] ?? 0) + p.metrics.comments; return acc
-  }, {}), [posts])
+  const topWords = useMemo(() => {
+    if (commentTexts.length === 0) return []
+    const stopwords = new Set(['de','a','o','e','do','da','em','que','para','com','uma','um','no','na','os','as','se','por','mais','mas','foi','ele','ao','dos','das','já','sua','seu','tem','não','é','ou','quando','isso','esta','vai','só','porque','aqui','como','também','muito','sem','essa','esse','ser','ter','fazer','pode','sobre'])
+    const freq: Record<string, number> = {}
+    commentTexts.forEach(t => {
+      t.toLowerCase().replace(/@[\w.]+/g, ' ').split(/\s+/).forEach(w => {
+        const clean = w.replace(/[^a-záàâãéèêíóôõúüçñ]/gi, '')
+        if (clean.length > 3 && clean.length <= 20 && !stopwords.has(clean)) freq[clean] = (freq[clean] ?? 0) + 1
+      })
+    })
+    return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  }, [commentTexts])
 
   const scoreDistribution = useMemo(() => [
     { label: '80+',   min: 80, max: 100, color: 'bg-red-500',              emoji: '🔥' },
@@ -236,7 +253,18 @@ export default function Dashboard() {
     }
   }, [posts])
 
-  const timeLabel = getPresetLabel(displayTime, customFrom, customTo)
+  const earliestPostMs = useMemo(() => {
+    if (allPosts.length === 0) return undefined
+    return Math.min(...allPosts.map(p => (p.publishedAt as unknown as Timestamp).toMillis()))
+  }, [allPosts])
+
+  const overrideAllLabel = useMemo(() => {
+    if (!earliestPostMs) return undefined
+    const d = new Date(earliestPostMs)
+    return `Desde ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  }, [earliestPostMs])
+
+  const timeLabel = getPresetLabel(displayTime, customFrom, customTo, overrideAllLabel)
 
   return (
     <div className="space-y-6">
@@ -261,18 +289,25 @@ export default function Dashboard() {
           customFrom={customFrom}
           customTo={customTo}
           onChange={(time, from, to) => setDisplayTime(time, from, to)}
+          overrideAllLabel={overrideAllLabel}
         />
       </div>
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* KPI grid — 4 colunas × 2 linhas */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Total" value={loading ? '—' : posts.length}
-          sub={`${candidatePosts.length} aquecendo`}
+          sub={periodDeltas.posts !== 0 ? `${periodDeltas.posts > 0 ? '+' : ''}${periodDeltas.posts}% vs período ant.` : `${posts.length} publicações`}
           icon={<Activity className="w-3.5 h-3.5" />}
           delta={loading ? undefined : periodDeltas.posts} />
         <StatCard label="Repercutindo" value={loading ? '—' : trendingPosts.length}
-          sub="agora" icon={<span className="text-xs">🔴</span>}
+          sub="trending agora" icon={<span className="text-xs">🔴</span>}
           accent={trendingPosts.length > 0 ? 'text-red-400' : undefined} />
+        <StatCard label="Aquecendo" value={loading ? '—' : candidatePosts.length}
+          sub="candidatos" icon={<TrendingUp className="w-3.5 h-3.5" />}
+          accent={candidatePosts.length > 0 ? 'text-primary' : undefined} />
+        <StatCard label="Hora de pico" value={loading ? '—' : bestHour ?? '—'}
+          sub="hoje" icon={<Clock className="w-3.5 h-3.5" />}
+          accent={bestHour ? 'text-yellow-400' : undefined} />
         <StatCard label="Comentários" value={loading ? '—' : totalComments >= 1000 ? `${(totalComments/1000).toFixed(1)}k` : totalComments}
           sub={`~${avgComments}/post`} icon={<MessageCircle className="w-3.5 h-3.5" />} accent="text-primary"
           delta={loading ? undefined : periodDeltas.comments}
@@ -280,44 +315,56 @@ export default function Dashboard() {
             <p className="font-semibold text-foreground mb-1">Total de comentários</p>
             <p className="text-muted-foreground">Soma de comentários de todas as publicações no período.</p>
             <p className="text-muted-foreground mt-1.5"><strong className="text-foreground">~{avgComments}/post</strong> é a média de comentários por publicação.</p>
-            {periodDeltas.comments !== 0 && <p className="text-muted-foreground mt-1.5">A variação percentual compara a primeira e segunda metade do período.</p>}
           </>} />
         <StatCard label="Curtidas" value={loading ? '—' : totalLikes >= 1000 ? `${(totalLikes/1000).toFixed(1)}k` : totalLikes}
+          sub={totalViews > 0 ? `${totalViews >= 1000 ? `${(totalViews/1000).toFixed(1)}k` : totalViews} views` : undefined}
           icon={<Heart className="w-3.5 h-3.5" />} />
-        {totalViews > 0 && (
-          <StatCard label="Visualizações" value={totalViews >= 1000 ? `${(totalViews/1000).toFixed(1)}k` : totalViews}
-            icon={<Eye className="w-3.5 h-3.5" />} />
-        )}
         <StatCard label="Score médio" value={loading ? '—' : scoredPosts.length > 0 ? avgScore : '—'}
-          sub={scoredPosts.length > 0 ? `${scoredPosts.length} pontuados de ${posts.length}` : 'aguardando pontuação'}
-          icon={<TrendingUp className="w-3.5 h-3.5" />}
+          sub={scoredPosts.length > 0 ? `${scoredPosts.length}/${posts.length} pontuados` : 'aguardando'}
+          icon={<Zap className="w-3.5 h-3.5" />}
           accent={avgScore >= 65 ? 'text-red-400' : avgScore >= 40 ? 'text-primary' : undefined}
           delta={loading || scoredPosts.length === 0 ? undefined : periodDeltas.score}
           tooltip={<>
             <p className="font-semibold text-foreground mb-1.5">Trend Score médio (0–100)</p>
-            <p className="text-muted-foreground mb-1.5">Média entre os <strong className="text-foreground">{scoredPosts.length} posts ativamente pontuados</strong>. Posts recém-coletados (score = 0) não entram no cálculo.</p>
-            <div className="space-y-1 text-muted-foreground mb-2 border-t border-border pt-1.5">
+            <div className="space-y-1 text-muted-foreground">
               <p><strong className="text-red-400">🔥 80+</strong> — Viral, pautar agora</p>
               <p><strong className="text-orange-400">📈 65–79</strong> — Em alta, monitorar</p>
               <p><strong className="text-yellow-400">👀 40–64</strong> — Candidato</p>
               <p><strong className="text-muted-foreground">📊 0–39</strong> — Volume normal</p>
             </div>
-            {periodDeltas.score !== 0 && <p className="text-muted-foreground border-t border-border pt-1.5">A variação % compara a média de score da primeira e segunda metade do período.</p>}
           </>} />
         <StatCard label="Analisados IA" value={loading ? '—' : analyzedPosts.length}
           sub={`${aiCoverage}% cobertura`} icon={<FileText className="w-3.5 h-3.5" />}
           accent={analyzedPosts.length > 0 ? 'text-green-400' : undefined}
           tooltip={<>
             <p className="font-semibold text-foreground mb-1">Análises editoriais (IA)</p>
-            <p className="text-muted-foreground mb-1.5">Publicações já processadas pela inteligência artificial para identificar pautas jornalísticas.</p>
-            <p className="text-muted-foreground"><strong className="text-foreground">{aiCoverage}% cobertura</strong> — proporção de posts já analisados no período.</p>
-            <p className="text-muted-foreground mt-1.5">Posts com score ≥ 65 são priorizados para análise automática.</p>
+            <p className="text-muted-foreground mb-1">Publicações já processadas pela IA para identificar pautas jornalísticas.</p>
+            <p className="text-muted-foreground"><strong className="text-foreground">{aiCoverage}% cobertura</strong> — proporção de posts analisados no período.</p>
           </>} />
-        {bestHour && (
-          <StatCard label="Hora de pico" value={bestHour}
-            sub="hoje" icon={<Clock className="w-3.5 h-3.5" />} accent="text-yellow-400" />
-        )}
       </div>
+
+      {/* Engagement overview — acima do gráfico de atividade */}
+      <Card className="border-border/60">
+        <CardContent className="p-5">
+          <SectionTitle title="Visão geral de engajamento" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { label: 'Total comentários', value: totalComments.toLocaleString('pt-BR'), icon: <MessageCircle className="w-4 h-4" />, accent: 'text-primary' },
+              { label: 'Total curtidas',    value: totalLikes.toLocaleString('pt-BR'),    icon: <Heart className="w-4 h-4" />,          accent: 'text-pink-400' },
+              { label: 'Eng. médio/post',   value: Math.round((totalComments + totalLikes) / Math.max(posts.length, 1)).toLocaleString('pt-BR'), icon: <Zap className="w-4 h-4" />, accent: 'text-yellow-400' },
+              { label: 'Posts analisados',  value: `${analyzedPosts.length} / ${posts.length}`, icon: <Award className="w-4 h-4" />, accent: 'text-green-400' },
+            ].map(item => (
+              <div key={item.label} className="text-center space-y-1">
+                <div className="flex items-center justify-center">
+                  <span className="text-muted-foreground/50">{item.icon}</span>
+                </div>
+                <p className={cn('text-xl font-bold tabular-nums', item.accent)}>{loading ? '—' : item.value}</p>
+                <p className="text-[10px] text-muted-foreground/60">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Activity chart */}
       <Card className="border-border/60">
@@ -327,35 +374,8 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* 2-column: platform breakdown + score distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="border-border/60">
-          <CardContent className="p-5">
-            <SectionTitle title="Plataformas" sub={`· ${posts.length} posts`} />
-            <div className="space-y-3">
-              {Object.entries(platformCounts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([plat, count]) => {
-                  const cfg = PLATFORM_CONFIG[plat] ?? { label: plat, color: 'bg-secondary' }
-                  const eng = platformEngagement[plat] ?? 0
-                  return (
-                    <PlatformBar
-                      key={plat}
-                      label={`${cfg.label} · ${eng >= 1000 ? `${(eng/1000).toFixed(1)}k` : eng} coment.`}
-                      count={count}
-                      total={posts.length}
-                      color={cfg.color}
-                    />
-                  )
-                })}
-              {Object.keys(platformCounts).length === 0 && (
-                <p className="text-xs text-muted-foreground italic">Sem dados</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60">
+      {/* Score distribution */}
+      <Card className="border-border/60">
           <CardContent className="p-5">
             <SectionTitle title="Distribuição de score" />
             <div className="space-y-3">
@@ -381,59 +401,98 @@ export default function Dashboard() {
                 <p className="text-xl font-bold text-green-400">{aiCoverage}%</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+      </CardContent>
+      </Card>
 
-      {/* WordCloud + Top posts */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+      {/* WordCloud + sidebar direita */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-4 items-start">
+
+        {/* Nuvem de palavras — ocupa toda a altura disponível */}
         <Card className="border-border/60">
           <CardContent className="p-5">
             <SectionTitle title="Palavras mais mencionadas" sub="· nos comentários coletados" />
-            <WordCloud texts={commentTexts} loading={cloudLoading} />
+            <WordCloud texts={commentTexts} loading={cloudLoading} height={380} />
           </CardContent>
         </Card>
 
-        <Card className="border-border/60">
-          <CardContent className="p-5">
-            <SectionTitle title="Top engajamento" sub="· por comentários" />
-            {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-10 bg-secondary rounded animate-pulse" />
-                ))}
-              </div>
-            ) : top8.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">Sem dados</p>
-            ) : (
-              top8.map((p, i) => <TopPostRow key={p.id} post={p} rank={i + 1} />)
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        {/* Sidebar com itens do radar */}
+        <div className="space-y-3">
 
-      {/* Engagement overview */}
-      <Card className="border-border/60">
-        <CardContent className="p-5">
-          <SectionTitle title="Visão geral de engajamento" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[
-              { label: 'Total comentários', value: totalComments.toLocaleString('pt-BR'), icon: <MessageCircle className="w-4 h-4" />, accent: 'text-primary' },
-              { label: 'Total curtidas',    value: totalLikes.toLocaleString('pt-BR'),    icon: <Heart className="w-4 h-4" />,          accent: 'text-pink-400' },
-              { label: 'Eng. médio/post',   value: Math.round((totalComments + totalLikes) / Math.max(posts.length, 1)).toLocaleString('pt-BR'), icon: <Zap className="w-4 h-4" />, accent: 'text-yellow-400' },
-              { label: 'Posts analisados',  value: `${analyzedPosts.length} / ${posts.length}`, icon: <Award className="w-4 h-4" />, accent: 'text-green-400' },
-            ].map(item => (
-              <div key={item.label} className="text-center space-y-1">
-                <div className="flex items-center justify-center">
-                  <span className="text-muted-foreground/50">{item.icon}</span>
+          {/* Top posts */}
+          <Card className="border-border/60">
+            <CardContent className="p-4">
+              <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest mb-2.5">Top engajamento</p>
+              {loading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="h-10 bg-secondary rounded animate-pulse" />
+                  ))}
                 </div>
-                <p className={cn('text-xl font-bold tabular-nums', item.accent)}>{loading ? '—' : item.value}</p>
-                <p className="text-[10px] text-muted-foreground/60">{item.label}</p>
+              ) : top8.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">Sem dados</p>
+              ) : (
+                top8.slice(0, 6).map((p, i) => <TopPostRow key={p.id} post={p} rank={i + 1} />)
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Mais recente */}
+          {mostRecent && !loading && (
+            <Card className="border-border/60">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
+                  <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest">Mais recente</p>
+                </div>
+                <p className="text-xs text-foreground/80 leading-snug line-clamp-2">
+                  {mostRecent.text || <span className="italic text-muted-foreground">Sem legenda</span>}
+                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-muted-foreground/50">
+                    {formatDistanceToNow((mostRecent.publishedAt as unknown as Timestamp).toDate(), { addSuffix: true, locale: ptBR })}
+                    {' · '}{PLATFORM_CONFIG[mostRecent.platform]?.label ?? mostRecent.platform}
+                  </p>
+                  <Link to={`/radar/post/${mostRecent.id}`}
+                    className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                    ver <ArrowUpRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Palavras em destaque */}
+          {topWords.length > 0 && (
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest mb-2.5">Palavras em destaque</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {topWords.map(([word, freq]) => (
+                    <span key={word}
+                      className="px-2 py-1 rounded-md bg-secondary border border-border/60 text-xs text-foreground/80 font-medium flex items-center gap-1.5">
+                      {word}
+                      <span className="text-[9px] text-muted-foreground/60 font-mono bg-background/50 rounded px-0.5">{freq}×</span>
+                    </span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Instagram Insights */}
+          <Card className="border-pink-500/20 bg-gradient-to-b from-pink-500/3 to-transparent">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-1.5 mb-3">
+                <div className="w-4 h-4 rounded-sm bg-gradient-to-br from-pink-400 via-purple-400 to-orange-400 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[8px] text-white font-bold">IG</span>
+                </div>
+                <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest">Instagram Insights</p>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <InstagramInsightsPanel />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }

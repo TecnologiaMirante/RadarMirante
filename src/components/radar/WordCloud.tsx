@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import { Download } from 'lucide-react'
 import { useAccount, ACCOUNT_COLORS } from '@/contexts/AccountContext'
 
 // ─── Stop-words ───────────────────────────────────────────────────────────────
@@ -37,10 +38,12 @@ function processTexts(texts: string[]): WordFreq[] {
   for (const text of texts) {
     const words = text
       .toLowerCase()
+      .replace(/@[\w.]+/g, ' ')           // remove @mencoes antes de tudo
       .replace(/[^a-záàãâéêíóôõúüçñ\s]/g, ' ')
       .split(/\s+/)
     for (const w of words) {
       if (w.length < 3) continue
+      if (w.length > 20) continue         // nomes concatenados (franciscodossantos)
       if (STOPWORDS.has(w)) continue
       if (/^\d+$/.test(w)) continue
       freq[w] = (freq[w] ?? 0) + 1
@@ -117,9 +120,46 @@ interface WordCloudProps {
 export function WordCloud({ texts, loading, height = 210 }: WordCloudProps) {
   const { account } = useAccount()
   const color = ACCOUNT_COLORS[account]
+  const svgRef = useRef<SVGSVGElement>(null)
 
   const words   = useMemo(() => processTexts(texts), [texts])
   const layout  = useMemo(() => buildLayout(words), [words])
+
+  function downloadPNG() {
+    if (!svgRef.current) return
+    const isDark = document.documentElement.classList.contains('dark')
+      || document.documentElement.getAttribute('data-theme') === 'dark'
+    const bgColor = isDark ? '#0f1117' : '#ffffff'
+    const svgEl = svgRef.current
+    const { width, height } = svgEl.getBoundingClientRect()
+    const clone = svgEl.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    clone.setAttribute('width', String(width))
+    clone.setAttribute('height', String(height))
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', bgColor)
+    clone.insertBefore(bg, clone.firstChild)
+    const svgBlob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = width * 2; canvas.height = height * 2
+      const ctx = canvas.getContext('2d')!
+      ctx.scale(2, 2)
+      ctx.fillStyle = bgColor; ctx.fillRect(0, 0, width, height)
+      ctx.drawImage(img, 0, 0, width, height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(png => {
+        if (!png) return
+        const pngUrl = URL.createObjectURL(png)
+        const a = document.createElement('a')
+        a.href = pngUrl; a.download = `nuvem-${account}.png`; a.click()
+        URL.revokeObjectURL(pngUrl)
+      }, 'image/png')
+    }
+    img.src = url
+  }
 
   // ── Loading ──
   if (loading) {
@@ -158,30 +198,41 @@ export function WordCloud({ texts, loading, height = 210 }: WordCloudProps) {
 
   return (
     <div>
-    <svg
-      viewBox={`${vx} ${vy} ${vw} ${vh}`}
-      style={{ width: '100%', height: `${height}px`, display: 'block' }}
-      preserveAspectRatio="xMidYMid meet"
-      aria-label="Nuvem de palavras"
-    >
-      {layout.map(({ word, count, x, y, fontSize, opacity, weight }) => (
-        <text
-          key={word}
-          x={x}
-          y={y}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={fontSize}
-          fontWeight={weight}
-          fill={color}
-          fillOpacity={opacity}
-          style={{ cursor: 'default', userSelect: 'none' }}
+      <svg
+        ref={svgRef}
+        viewBox={`${vx} ${vy} ${vw} ${vh}`}
+        style={{ width: '100%', height: `${height}px`, display: 'block' }}
+        preserveAspectRatio="xMidYMid meet"
+        aria-label="Nuvem de palavras"
+      >
+        {layout.map(({ word, count, x, y, fontSize, opacity, weight }) => (
+          <text
+            key={word}
+            x={x}
+            y={y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={fontSize}
+            fontWeight={weight}
+            fill={color}
+            fillOpacity={opacity}
+            style={{ cursor: 'default', userSelect: 'none' }}
+          >
+            <title>{count} menção{count !== 1 ? 'ões' : ''}</title>
+            {word}
+          </text>
+        ))}
+      </svg>
+      <div className="flex justify-end mt-2">
+        <button
+          onClick={downloadPNG}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          title="Baixar nuvem como PNG"
         >
-          <title>{count} menção{count !== 1 ? 'ões' : ''}</title>
-          {word}
-        </text>
-      ))}
-    </svg>
+          <Download className="w-3 h-3" />
+          baixar PNG
+        </button>
+      </div>
     </div>
   )
 }

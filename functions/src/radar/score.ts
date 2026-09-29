@@ -23,24 +23,27 @@ export interface ScoreInput {
   spamRatio: number           // 0–1 (fração de possível spam)
   duplicateRatio: number      // 0–1 (fração de comentários duplicados)
   authorConcentration: number // 0–1 (concentração em poucos autores)
+
+  // Tetos por perfil de conta (omitir = usar defaults do perfil editorial)
+  commentCeiling?: number     // comentários para atingir score máximo (default 300)
+  velocityMax?: number        // comentários/min para score máximo (default 2)
+  uniqueAuthorMax?: number    // autores únicos em 15min para score máximo (default 20)
 }
 
 export function calculateAnomalyScore(input: ScoreInput): number {
+  const ceiling = input.commentCeiling ?? 300
   if (input.baselineP90 === 0) {
-    // Sem baseline: estima anomalia por volume + velocidade
-    // Teto 300 comentários = ~100 (escala de veículo regional)
-    const volScore = Math.min(100, (Math.log10(input.commentCount + 1) / Math.log10(301)) * 100)
-    const velScore = calculateVelocityScore(input.commentVelocity)
+    const volScore = Math.min(100, (Math.log10(input.commentCount + 1) / Math.log10(ceiling + 1)) * 100)
+    const velScore = calculateVelocityScore(input.commentVelocity, input.velocityMax)
     return Math.min(100, volScore * 0.6 + velScore * 0.4)
   }
   const ratio = input.commentCount / input.baselineP90
   return Math.min(100, (ratio - 1) * 50)
 }
 
-export function calculateVelocityScore(commentVelocity: number): number {
-  // Escala raiz: 0.5/min→50, 1/min→71, 2/min→100 (teto realista para veículo regional)
+export function calculateVelocityScore(commentVelocity: number, velocityMax = 2): number {
   if (commentVelocity <= 0) return 0
-  return Math.min(100, Math.sqrt(commentVelocity / 2) * 100)
+  return Math.min(100, Math.sqrt(commentVelocity / velocityMax) * 100)
 }
 
 export function calculateLikesScore(likesCount: number): number {
@@ -55,9 +58,8 @@ export function calculateVolumeScore(commentCount: number, baselineP75: number):
   return Math.min(100, ratio * 25)
 }
 
-export function calculateUniqueAuthorsScore(uniqueAuthors15m: number): number {
-  // Referência: >= 20 autores únicos em 15min = score máximo
-  return Math.min(100, uniqueAuthors15m * 5)
+export function calculateUniqueAuthorsScore(uniqueAuthors15m: number, uniqueAuthorMax = 20): number {
+  return Math.min(100, (uniqueAuthors15m / uniqueAuthorMax) * 100)
 }
 
 export function calculateAccelerationScore(acceleration: number): number {
@@ -82,18 +84,19 @@ export function applyPenalties(
 // Quando não há baseline nem atividade recente (post histórico), o score
 // baseado em velocidade/anomalia é sempre ~0. Nesse caso usamos escala
 // logarítmica do volume total: 10 coment→30, 100→67, 500→90, 1000→100.
-function calculateEngagementFallback(commentCount: number, likesCount = 0): number {
+function calculateEngagementFallback(commentCount: number, likesCount = 0, ceiling = 300): number {
   if (commentCount <= 0 && likesCount <= 0) return 0
-  // Considera comentários + curtidas/15 para posts históricos sem velocidade
-  const combined = commentCount + Math.floor(likesCount / 15)
-  return Math.min(100, (Math.log10(combined + 1) / Math.log10(301)) * 100)
+  // Likes só potencializam posts que já têm comentários — sem comentários, score é baixo
+  const likesBonus = commentCount > 0 ? Math.floor(likesCount / 15) : 0
+  const combined = commentCount + likesBonus
+  return Math.min(100, (Math.log10(combined + 1) / Math.log10(ceiling + 1)) * 100)
 }
 
 export function calculateStatisticalTrendScore(input: ScoreInput): TrendScoreBreakdown {
   const anomalyScore = Math.max(0, calculateAnomalyScore(input))
-  const velocityScore = calculateVelocityScore(input.commentVelocity)
+  const velocityScore = calculateVelocityScore(input.commentVelocity, input.velocityMax)
   const volumeScore = calculateVolumeScore(input.commentCount, input.baselineP75)
-  const uniqueAuthorsScore = calculateUniqueAuthorsScore(input.uniqueAuthors15m)
+  const uniqueAuthorsScore = calculateUniqueAuthorsScore(input.uniqueAuthors15m, input.uniqueAuthorMax)
   const accelerationScore = calculateAccelerationScore(input.acceleration)
   const additionalScore = calculateLikesScore(input.likesCount ?? 0)
 
@@ -103,7 +106,7 @@ export function calculateStatisticalTrendScore(input: ScoreInput): TrendScoreBre
   // Sem baseline e sem atividade recente: score de engajamento histórico puro.
   // Evita que todos os posts históricos travem em ~15.
   if (!hasBaseline && !hasRealtime) {
-    const engagementScore = calculateEngagementFallback(input.commentCount, input.likesCount ?? 0)
+    const engagementScore = calculateEngagementFallback(input.commentCount, input.likesCount ?? 0, input.commentCeiling)
     const spamPenalty = Math.min(RADAR_CONFIG.score.maxSpamPenalty, input.spamRatio * RADAR_CONFIG.score.maxSpamPenalty)
     const duplicatePenalty = Math.min(RADAR_CONFIG.score.maxDuplicatePenalty, input.duplicateRatio * RADAR_CONFIG.score.maxDuplicatePenalty)
     const authorConcentrationPenalty = Math.min(RADAR_CONFIG.score.maxAuthorConcentrationPenalty, input.authorConcentration * RADAR_CONFIG.score.maxAuthorConcentrationPenalty)

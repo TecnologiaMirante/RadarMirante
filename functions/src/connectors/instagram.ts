@@ -74,12 +74,14 @@ export class InstagramConnector implements SocialConnector {
   readonly platform = 'instagram' as const
   private lastResult: CollectionResult | null = null
   private token: string
-  private accountId: string
+  private instagramAccountId: string  // ID numérico da conta no Instagram/Meta
+  private radarAccountId: string      // ID interno no Radar (ex: 'imirante', 'tvmirante')
   private db: admin.firestore.Firestore
 
-  constructor(token: string, accountId: string, db: admin.firestore.Firestore) {
+  constructor(token: string, instagramAccountId: string, db: admin.firestore.Firestore, radarAccountId = 'imirante') {
     this.token = token.trim()
-    this.accountId = accountId.trim()
+    this.instagramAccountId = instagramAccountId.trim()
+    this.radarAccountId = radarAccountId
     this.db = db
   }
 
@@ -95,7 +97,7 @@ export class InstagramConnector implements SocialConnector {
       const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000)
 
       const response = await igFetch<IGMediaResponse>(
-        `/${this.accountId}/media`,
+        `/${this.instagramAccountId}/media`,
         this.token,
         {
           fields: 'id,caption,media_type,permalink,timestamp,like_count,comments_count',
@@ -162,7 +164,7 @@ export class InstagramConnector implements SocialConnector {
       if (cursor) params['after'] = cursor
 
       const response = await igFetch<IGMediaResponse>(
-        `/${this.accountId}/media`,
+        `/${this.instagramAccountId}/media`,
         this.token,
         params,
       )
@@ -290,7 +292,7 @@ export class InstagramConnector implements SocialConnector {
     if (existing.empty) {
       const ref = await this.db.collection('posts').add({
         ...raw,
-        account: 'imirante',
+        account: this.radarAccountId,
         platform: 'instagram',
         status: 'monitoring',
         trendScore: 0,

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
 import { useTimeFilter } from '@/hooks/useTimeFilter'
 import { getOpportunities, updateOpportunityStatus } from '@/services/radar'
+import { useAccount } from '@/contexts/AccountContext'
 import type { Opportunity, OpportunityStatus } from '@/types/radar'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
@@ -197,6 +198,7 @@ function OpportunityCard({ opp, onStatusChange }: { opp: Opportunity; onStatusCh
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function AnalysesPage() {
+  const { account } = useAccount()
   const [allOpps, setAllOpps] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<OpportunityStatus | 'all'>('all')
@@ -206,7 +208,7 @@ export default function AnalysesPage() {
   async function load() {
     setLoading(true)
     try {
-      const data = await getOpportunities({ platform: 'all', time: 'all', sort: 'recent' })
+      const data = await getOpportunities({ platform: 'all', time: 'all', sort: 'recent' }, account)
       setAllOpps(data)
     } catch (err) {
       console.error('[Analyses]', err)
@@ -215,7 +217,7 @@ export default function AnalysesPage() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [account])
 
   function handleStatusChange(id: string, status: OpportunityStatus) {
     setAllOpps(prev => prev.map(o => o.id === id ? { ...o, status } : o))

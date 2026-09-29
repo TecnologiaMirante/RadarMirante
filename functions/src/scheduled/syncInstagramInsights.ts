@@ -97,6 +97,7 @@ export async function syncInstagramInsights(
   db: admin.firestore.Firestore,
   token: string,
   accountId: string,
+  radarId: string,
 ): Promise<void> {
   console.log('[syncInstagramInsights] Iniciando')
 
@@ -113,7 +114,7 @@ export async function syncInstagramInsights(
     throw new Error(`Instagram API error: ${profile.error.message}`)
   }
 
-  await db.collection('instagramAccount').doc('profile').set({
+  await db.collection('instagramAccount').doc(radarId).set({
     username: profile.username,
     name: profile.name,
     biography: profile.biography ?? '',
@@ -147,23 +148,49 @@ export async function syncInstagramInsights(
     },
   ).catch(() => null)
 
-  const followerCountByDate: Record<string, number> = {}
-  if (followerResponse?.data?.[0]) {
+  // follower_count retorna delta diário (ganho/perda), não total acumulado.
+  // Se a chamada com since/until falhar (ex: tvmirante), tenta sem o range de datas.
+  const followerGainByDate: Record<string, number> = {}
+  if (followerResponse?.data?.[0] && !followerResponse.error) {
     for (const { date, value } of extractDailyValues(followerResponse.data[0])) {
-      followerCountByDate[date] = value
+      followerGainByDate[date] = value
     }
   }
 
-  const followerDates = Object.keys(followerCountByDate).sort()
+  if (Object.keys(followerGainByDate).length === 0) {
+    const fallbackResponse = await igFetch<IGInsightsResponse>(
+      `/${accountId}/insights`,
+      token,
+      { metric: 'follower_count', period: 'day' },
+    ).catch(() => null)
+    if (fallbackResponse?.data?.[0] && !fallbackResponse.error) {
+      for (const { date, value } of extractDailyValues(fallbackResponse.data[0])) {
+        followerGainByDate[date] = value
+      }
+    }
+  }
+
+  // Calcula total acumulado retroativamente a partir do total atual do perfil.
+  // Exemplo: hoje=100k, ontem ganhou +50 → ontem=99.950k
+  const currentTotal = profile.followers_count
+  const followerDates = Object.keys(followerGainByDate).sort()
+  const followerCountByDate: Record<string, number> = {}
+  if (followerDates.length > 0) {
+    let accumulated = currentTotal
+    for (let i = followerDates.length - 1; i >= 0; i--) {
+      followerCountByDate[followerDates[i]] = accumulated
+      accumulated -= (followerGainByDate[followerDates[i]] ?? 0)
+    }
+  }
+
   if (followerDates.length > 0) {
     const batch = db.batch()
     for (let i = 0; i < followerDates.length; i++) {
       const date = followerDates[i]
-      const followerCount = followerCountByDate[date]
-      const prevFollowers = i > 0 ? followerCountByDate[followerDates[i - 1]] : followerCount
-      const followerGain  = followerCount - prevFollowers
+      const followerGain = followerGainByDate[date]
+      const followerCount = followerCountByDate[date] ?? currentTotal
 
-      const ref = db.collection('instagramInsights').doc(date)
+      const ref = db.collection('instagramAccount').doc(radarId).collection('insights').doc(date)
       batch.set(ref, {
         date,
         followerCount,
@@ -181,6 +208,49 @@ export async function syncInstagramInsights(
     console.log(`[syncInstagramInsights] ${followerDates.length} dias de follower_count salvos`)
   } else {
     console.warn('[syncInstagramInsights] follower_count: sem dados')
+  }
+
+  // ── 2b. Métricas de engajamento (formato legado, sem metric_type) ────────────
+  // reach, impressions, profile_views, website_clicks com period=day.
+  // metric_type=total_value (formato v21) retorna #10 permission denied.
+  // O formato legado (.values[]) pode funcionar sem aprovação adicional.
+  // reach funciona com formato legado (.values[]); views/profile_views/website_clicks
+  // exigem metric_type=total_value (requer Meta App Review adicional).
+  const reachResponse = await igFetch<IGInsightsResponse>(
+    `/${accountId}/insights`,
+    token,
+    {
+      metric: 'reach',
+      period: 'day',
+      since: String(unixFromDate(since)),
+      until: String(unixFromDate(until)),
+    },
+  ).catch(() => null)
+
+  if (reachResponse?.data?.[0] && !reachResponse.error && followerDates.length > 0) {
+    const reachByDate: Record<string, number> = {}
+    for (const { date, value } of extractDailyValues(reachResponse.data[0])) {
+      reachByDate[date] = value
+    }
+
+    const reachBatch = db.batch()
+    let updated = 0
+    for (const date of followerDates) {
+      if (reachByDate[date] !== undefined && reachByDate[date] > 0) {
+        reachBatch.set(
+          db.collection('instagramAccount').doc(radarId).collection('insights').doc(date),
+          { reach: reachByDate[date], updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+          { merge: true },
+        )
+        updated++
+      }
+    }
+    if (updated > 0) {
+      await reachBatch.commit()
+      console.log(`[syncInstagramInsights] reach salvo: ${updated} dias`)
+    }
+  } else if (reachResponse?.error) {
+    console.warn(`[syncInstagramInsights] reach indisponível: ${reachResponse.error.message}`)
   }
 
   // ── 3. Online followers por hora ─────────────────────────────────────────────
@@ -205,7 +275,7 @@ export async function syncInstagramInsights(
       }
     }
 
-    await db.collection('instagramOnlineFollowers').doc(toDateStr(new Date())).set({
+    await db.collection('instagramAccount').doc(radarId).collection('onlineFollowers').doc(toDateStr(new Date())).set({
       date: toDateStr(new Date()),
       byHour,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -224,7 +294,7 @@ export async function syncInstagramInsights(
 
     if (!res || res.error || !res.data?.[0]?.values?.[0]) continue
     const data = res.data[0].values[0].value
-    await db.collection('instagramAudience').doc(metric).set({
+    await db.collection('instagramAccount').doc(radarId).collection('audience').doc(metric).set({
       metric,
       data,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

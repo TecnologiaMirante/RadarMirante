@@ -22,10 +22,11 @@ const ACCOUNTS = [
   {
     id: 'imirante',
     displayName: '@imirante',
-    shortName: 'Imirante',
+    shortName: 'iMirante',
     color: '#38B6FF',
     active: true,
     emProducao: false,
+    profile: 'editorial',
     order: 0,
   },
   {
@@ -35,7 +36,18 @@ const ACCOUNTS = [
     color: '#91BD32',
     active: true,
     emProducao: true,
+    profile: 'editorial',
     order: 1,
+  },
+  {
+    id: 'tvmirante',
+    displayName: '@tvmirante',
+    shortName: 'TV',
+    color: '#0049AF',
+    active: true,
+    emProducao: true,
+    profile: 'viral',
+    order: 2,
   },
 ]
 

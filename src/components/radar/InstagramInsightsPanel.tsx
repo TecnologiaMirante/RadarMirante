@@ -10,6 +10,16 @@ import {
 } from '@/services/instagram'
 import type { InstagramDailyInsight, InstagramAccountProfile, InstagramOnlineFollowers } from '@/types/instagram'
 import { cn } from '@/lib/utils'
+import { useAccount } from '@/contexts/AccountContext'
+import imiranteLogo from '@/assets/imirante_logo.png'
+import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
+import tvmiranteLogo from '@/assets/tvmirante_logo.png'
+
+const ACCOUNT_LOGOS: Record<string, string> = {
+  imirante: imiranteLogo,
+  imiranteesporte: imiranteEsporteLogo,
+  tvmirante: tvmiranteLogo,
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -116,6 +126,7 @@ function OnlineChart({ byHour }: { byHour: number[] }) {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function InstagramInsightsPanel() {
+  const { account } = useAccount()
   const [profile, setProfile] = useState<InstagramAccountProfile | null>(null)
   const [insights, setInsights] = useState<InstagramDailyInsight[]>([])
   const [online, setOnline] = useState<InstagramOnlineFollowers | null>(null)
@@ -127,9 +138,9 @@ export function InstagramInsightsPanel() {
     setError(null)
     try {
       const [p, i, o] = await Promise.all([
-        getInstagramProfile(),
-        getInstagramInsights(14),
-        getOnlineFollowers(),
+        getInstagramProfile(account),
+        getInstagramInsights(14, account),
+        getOnlineFollowers(account),
       ])
       setProfile(p)
       setInsights(i)
@@ -142,7 +153,7 @@ export function InstagramInsightsPanel() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [account])
 
   if (loading) {
     return (
@@ -199,7 +210,9 @@ export function InstagramInsightsPanel() {
   const followerGain7      = sum(last7, 'followerGain')
   const followerGainPrev   = sum(prev7, 'followerGain')
 
-  const latestFollowers = insights.length > 0 ? insights[insights.length - 1].followerCount : profile?.followersCount ?? 0
+  const latestFollowers = insights.length > 0
+    ? (insights[insights.length - 1].followerCount || profile?.followersCount || 0)
+    : (profile?.followersCount ?? 0)
 
   const reachChartData = last7.map(d => ({
     label: d.date.slice(5),
@@ -212,11 +225,19 @@ export function InstagramInsightsPanel() {
       {/* Perfil */}
       {profile && (
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 via-purple-400 to-orange-400 flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm">
-              {profile.username.slice(0, 1).toUpperCase()}
-            </span>
-          </div>
+          {ACCOUNT_LOGOS[account] ? (
+            <img
+              src={ACCOUNT_LOGOS[account]}
+              alt={account}
+              className="w-9 h-9 rounded-full object-contain bg-card border border-border/60 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 via-purple-400 to-orange-400 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-sm">
+                {profile.username.slice(0, 1).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div className="min-w-0">
             <p className="text-sm font-bold text-foreground truncate">@{profile.username}</p>
             <p className="text-[10px] text-muted-foreground/60 truncate">{profile.name}</p>

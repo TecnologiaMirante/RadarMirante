@@ -11,7 +11,7 @@ import { createOrUpdateOpportunity } from './radar/opportunity'
 import { getSnapshotHistory } from './radar/snapshots'
 import { getBucket, getPostAgeMinutes, getBaseline } from './radar/baseline'
 import { InstagramConnector } from './connectors/instagram'
-import type { RadarPost, RadarComment, AnalysisRun, AnalysisTrigger } from './types/radar'
+import type { RadarPost, RadarComment, AnalysisRun, AnalysisTrigger, AccountProfile } from './types/radar'
 import type { AnalysisTask } from './tasks/queueAnalysis'
 
 if (admin.apps.length === 0) {
@@ -22,8 +22,40 @@ const db = admin.firestore()
 
 const ALLOWED_DOMAIN = 'mirante.com.br'
 const openaiApiKey = defineSecret('OPENAI_API_KEY')
-const instagramToken = defineSecret('INSTAGRAM_ACCESS_TOKEN')
-const instagramAccountId = defineSecret('INSTAGRAM_ACCOUNT_ID')
+
+// ─── Secrets por conta Instagram ──────────────────────────────────────────────
+// Cada conta tem seu próprio par de token + account ID no Secret Manager.
+// Para adicionar uma nova conta: crie os secrets no Secret Manager, declare
+// com defineSecret() aqui e adicione uma entrada em getActiveAccounts().
+const instagramToken       = defineSecret('INSTAGRAM_ACCESS_TOKEN')
+const instagramAccountId   = defineSecret('INSTAGRAM_ACCOUNT_ID')
+const tvmiranteToken       = defineSecret('TVMIRANTE_INSTAGRAM_ACCESS_TOKEN')
+const tvmiranteAccountId   = defineSecret('TVMIRANTE_INSTAGRAM_ACCOUNT_ID')
+
+interface AccountEntry {
+  radarId: string
+  profile: AccountProfile
+  getToken: () => string
+  getAccountId: () => string
+}
+
+function getActiveAccounts(): AccountEntry[] {
+  return [
+    {
+      radarId: 'imirante',
+      profile: 'editorial' as AccountProfile,
+      getToken: () => instagramToken.value(),
+      getAccountId: () => instagramAccountId.value(),
+    },
+    {
+      radarId: 'tvmirante',
+      profile: 'viral' as AccountProfile,
+      getToken: () => tvmiranteToken.value(),
+      getAccountId: () => tvmiranteAccountId.value(),
+    },
+    // imiranteesporte: adicionar aqui quando secrets estiverem no Secret Manager
+  ]
+}
 
 // ─── Auth: validação de domínio + criação do doc em /users ───────────────────
 
@@ -60,8 +92,10 @@ export const healthCheck = onRequest(
 
 // ─── Monitoramento agendado ───────────────────────────────────────────────────
 
+// Roda a cada 15 min entre 6h e 20h45 (horário de Brasília).
+// Fora desse horário (21h–6h) o monitoramento fica pausado.
 export const monitorPostsScheduled = onSchedule(
-  { schedule: 'every 15 minutes', timeZone: 'America/Sao_Paulo', retryCount: 2, region: 'southamerica-east1' },
+  { schedule: '0 6-20 * * *', timeZone: 'America/Sao_Paulo', retryCount: 2, region: 'southamerica-east1' },
   async () => {
     console.log('[monitorPostsScheduled] Iniciando ciclo')
     try {
@@ -142,15 +176,19 @@ export const analyzePost = onRequest(
         ? ((post.metrics.comments - baseline.p90) / baseline.p90) * 100
         : 0
 
+      // Resolve perfil da conta para selecionar prompt correto
+      const accountEntry = getActiveAccounts().find(a => a.radarId === post.account)
+      const profile: AccountProfile = accountEntry?.profile ?? 'editorial'
+
       // Análise via OpenAI
       const analysis = await analyzeTrendingPost(
-        { post, snapshots, trendScore: task.trendScore, baselineComparison, comments },
+        { post, snapshots, trendScore: task.trendScore, baselineComparison, comments, profile },
         openaiApiKey.value(),
       )
 
       // Cria ou atualiza opportunity
       const opportunityId = await createOrUpdateOpportunity(
-        db, post, analysis, task.trendScore, 0.8, baselineComparison,
+        db, post, analysis, task.trendScore, 0.8, baselineComparison, profile,
       )
 
       // Marca run como concluído
@@ -234,12 +272,16 @@ export const processAnalysisRequest = onDocumentCreated(
     })
 
     try {
+      const fullPost = { id: postId, ...post } as RadarPost & { id: string }
+      const accountEntry = getActiveAccounts().find(a => a.radarId === fullPost.account)
+      const profile: AccountProfile = accountEntry?.profile ?? 'editorial'
+
       const analysis = await analyzeTrendingPost(
-        { post: { id: postId, ...post } as RadarPost & { id: string }, snapshots, trendScore: post.trendScore ?? 0, baselineComparison, comments },
+        { post: fullPost, snapshots, trendScore: post.trendScore ?? 0, baselineComparison, comments, profile },
         openaiApiKey.value(),
       )
       const opportunityId = await createOrUpdateOpportunity(
-        db, { id: postId, ...post } as RadarPost & { id: string }, analysis, post.trendScore ?? 0, 0.8, baselineComparison,
+        db, fullPost, analysis, post.trendScore ?? 0, 0.8, baselineComparison, profile,
       )
       await runRef.update({ status: 'completed', opportunityId, analysis, finishedAt: admin.firestore.FieldValue.serverTimestamp() })
       await requestRef.update({ status: 'completed', opportunityId, updatedAt: admin.firestore.FieldValue.serverTimestamp() })
@@ -261,43 +303,44 @@ export const syncInsights = onSchedule(
     timeZone: 'America/Sao_Paulo',
     retryCount: 1,
     region: 'southamerica-east1',
-    secrets: [instagramToken, instagramAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId],
   },
   async () => {
     console.log('[syncInsights] Iniciando')
-    try {
-      await syncInstagramInsights(db, instagramToken.value(), instagramAccountId.value())
-    } catch (err) {
-      console.error('[syncInsights] Erro:', err)
-      throw err
+    for (const acc of getActiveAccounts()) {
+      try {
+        await syncInstagramInsights(db, acc.getToken(), acc.getAccountId(), acc.radarId)
+        console.log(`[syncInsights] ${acc.radarId} OK`)
+      } catch (err) {
+        console.error(`[syncInsights] ${acc.radarId} erro:`, err)
+      }
     }
   },
 )
 
 // ─── Coleta Instagram agendada ────────────────────────────────────────────────
 
+// Coleta a cada hora entre 6h e 20h (horário de Brasília).
 export const collectInstagram = onSchedule(
   {
-    schedule: 'every 30 minutes',
+    schedule: '0 6-20 * * *',
     timeZone: 'America/Sao_Paulo',
     retryCount: 1,
     region: 'southamerica-east1',
-    secrets: [instagramToken, instagramAccountId],
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId],
   },
   async () => {
     console.log('[collectInstagram] Iniciando coleta')
-    const connector = new InstagramConnector(
-      instagramToken.value(),
-      instagramAccountId.value(),
-      db,
-    )
-    try {
-      await connector.syncPosts()
-      const result = connector.getLastCollectionResult()
-      console.log('[collectInstagram] Resultado:', result)
-    } catch (err) {
-      console.error('[collectInstagram] Erro:', err)
-      throw err
+    for (const acc of getActiveAccounts()) {
+      const connector = new InstagramConnector(acc.getToken(), acc.getAccountId(), db, acc.radarId)
+      try {
+        await connector.syncPosts()
+        console.log(`[collectInstagram] ${acc.radarId}:`, connector.getLastCollectionResult())
+      } catch (err) {
+        console.error(`[collectInstagram] ${acc.radarId} erro:`, err)
+      }
     }
   },
 )

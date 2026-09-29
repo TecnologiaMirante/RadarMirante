@@ -1,12 +1,13 @@
-// ─── EM PRODUÇÃO ─────────────────────────────────────────────────────────────
-// Para reativar: apague as 5 linhas abaixo e mude InstagramPageFull para export default function InstagramPage
-import { EmProducao } from '@/components/ui/EmProducao'
-export default function InstagramPage() {
-  return <EmProducao titulo="Instagram · Métricas do perfil" descricao="O painel de métricas do Instagram está sendo configurado e estará disponível em breve." />
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { useState, useEffect, useMemo } from 'react'
+import imiranteLogo from '@/assets/imirante_logo.png'
+import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
+import tvmiranteLogo from '@/assets/tvmirante_logo.png'
+
+const ACCOUNT_LOGOS: Record<string, string | undefined> = {
+  imirante: imiranteLogo,
+  imiranteesporte: imiranteEsporteLogo,
+  tvmirante: tvmiranteLogo,
+}
 import {
   ComposedChart, LineChart, BarChart,
   Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -28,6 +29,7 @@ import type { InstagramDailyInsight, InstagramAccountProfile, InstagramOnlineFol
 import type { RadarPost } from '@/types/radar'
 import type { Timestamp } from 'firebase/firestore'
 import { cn } from '@/lib/utils'
+import { useAccount } from '@/contexts/AccountContext'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -56,10 +58,10 @@ function fmtDate(dateStr: string): string {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, delta, icon, accent, tip,
+  label, value, delta, icon, accent, tip, pending,
 }: {
   label: string; value: string; delta?: number
-  icon: React.ReactNode; accent?: string; tip?: React.ReactNode
+  icon: React.ReactNode; accent?: string; tip?: React.ReactNode; pending?: boolean
 }) {
   return (
     <div className="flex flex-col gap-1.5 p-4 bg-card border border-border/60 rounded-xl">
@@ -68,13 +70,22 @@ function KpiCard({
         <span className="flex-1 truncate">{label}</span>
         {tip && <InfoTip side="bottom">{tip}</InfoTip>}
       </div>
-      <p className={cn('text-2xl font-bold tabular-nums leading-none tracking-tight', accent ?? 'text-foreground')}>
-        {value}
-      </p>
-      {delta !== undefined && delta !== 0 && (
-        <span className={cn('text-[10px] font-bold', delta > 0 ? 'text-green-400' : 'text-red-400')}>
-          {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}% vs período ant.
-        </span>
+      {pending ? (
+        <>
+          <p className="text-xl leading-none">⛏️</p>
+          <span className="text-[10px] text-muted-foreground/60 italic leading-tight">Garimpando…</span>
+        </>
+      ) : (
+        <>
+          <p className={cn('text-2xl font-bold tabular-nums leading-none tracking-tight', accent ?? 'text-foreground')}>
+            {value}
+          </p>
+          {delta !== undefined && delta !== 0 && (
+            <span className={cn('text-[10px] font-bold', delta > 0 ? 'text-green-400' : 'text-red-400')}>
+              {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}% vs período ant.
+            </span>
+          )}
+        </>
       )}
     </div>
   )
@@ -110,6 +121,48 @@ function ChartTooltip({ active, payload, label, formatter }: {
   )
 }
 
+function FollowerTooltip({ active, payload, label }: {
+  active?: boolean
+  payload?: { name: string; value: number; color: string }[]
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  const total = payload.find(p => p.name === 'seguidores')?.value ?? 0
+  const ganho = payload.find(p => p.name === 'ganho')?.value ?? 0
+  return (
+    <div className="bg-popover border border-border rounded-lg px-3 py-2.5 text-xs shadow-xl space-y-1.5 min-w-44">
+      <p className="font-bold text-muted-foreground">{label}</p>
+      <div className="flex items-center justify-between gap-4 pt-0.5 border-t border-border/40">
+        <span className="flex items-center gap-1.5 text-foreground/70">
+          <span className="w-2 h-0.5 rounded bg-pink-400 inline-block" />Total de seguidores
+        </span>
+        <span className="font-bold text-pink-400">{fmtN(total)}</span>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span className="flex items-center gap-1.5 text-foreground/70">
+          <span className="w-2 h-2 rounded-sm bg-green-500/60 inline-block" />Ganho do dia
+        </span>
+        <span className={`font-bold ${ganho >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {ganho >= 0 ? '+' : ''}{ganho.toLocaleString('pt-BR')}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function MiningPlaceholder({ metric }: { metric: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 gap-3 select-none">
+      <style>{`@keyframes dig{0%{transform:rotate(-20deg) translateY(0)}50%{transform:rotate(20deg) translateY(3px)}100%{transform:rotate(-20deg) translateY(0)}}`}</style>
+      <div className="text-4xl leading-none" style={{ animation: 'dig 0.9s ease-in-out infinite' }}>⛏️</div>
+      <p className="text-sm font-semibold text-foreground/60">Garimpando <span className="italic">{metric}</span>…</p>
+      <p className="text-[11px] text-muted-foreground/50 text-center max-w-56 leading-relaxed">
+        Aguardando aprovação da Meta para liberar este dado. Em breve estará aqui!
+      </p>
+    </div>
+  )
+}
+
 function AudienceBar({ label, value, total, color }: {
   label: string; value: number; total: number; color: string
 }) {
@@ -135,32 +188,33 @@ function AudienceBar({ label, value, total, color }: {
 type Period = 7 | 14 | 30
 
 const PERIODS: { value: Period; label: string }[] = [
-  { value: 7,  label: '7 dias' },
+  { value: 7, label: '7 dias' },
   { value: 14, label: '14 dias' },
   { value: 30, label: '30 dias' },
 ]
 
-const AGE_BUCKETS = ['13-17','18-24','25-34','35-44','45-54','55-64','65+']
+const AGE_BUCKETS = ['13-17', '18-24', '25-34', '35-44', '45-54', '55-64', '65+']
 
-export function InstagramPageFull() {
-  const [profile, setProfile]   = useState<InstagramAccountProfile | null>(null)
+export default function InstagramPage() {
+  const { account } = useAccount()
+  const [profile, setProfile] = useState<InstagramAccountProfile | null>(null)
   const [allInsights, setAllInsights] = useState<InstagramDailyInsight[]>([])
-  const [online, setOnline]     = useState<InstagramOnlineFollowers | null>(null)
+  const [online, setOnline] = useState<InstagramOnlineFollowers | null>(null)
   const [audience, setAudience] = useState<InstagramAudience | null>(null)
-  const [posts, setPosts]       = useState<RadarPost[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [period, setPeriod]     = useState<Period>(14)
+  const [posts, setPosts] = useState<RadarPost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState<Period>(14)
 
   async function load() {
     setLoading(true)
     try {
-      const [p, i, o, a, ps] = await Promise.all([
-        getInstagramProfile(),
-        getInstagramInsights(30),
-        getOnlineFollowers(),
-        getInstagramAudience().catch(() => null),
-        getPosts({ platform: 'instagram', time: 'all', sort: 'comments' }),
+      const [p, i, o, a] = await Promise.all([
+        getInstagramProfile(account),
+        getInstagramInsights(30, account),
+        getOnlineFollowers(account),
+        getInstagramAudience(account).catch(() => null),
       ])
+      const ps = await getPosts({ platform: 'instagram', time: 'all', sort: 'comments' }, account)
       setProfile(p)
       setAllInsights(i)
       setOnline(o)
@@ -173,24 +227,31 @@ export function InstagramPageFull() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [account])
 
-  const insights     = useMemo(() => allInsights.slice(-period),            [allInsights, period])
+  const insights = useMemo(() => allInsights.slice(-period), [allInsights, period])
   const prevInsights = useMemo(() => allInsights.slice(-period * 2, -period), [allInsights, period])
 
   // KPIs
-  const reach7       = sum(insights, 'reach')
-  const prevReach    = sum(prevInsights, 'reach')
-  const impr7        = sum(insights, 'impressions')
-  const prevImpr     = sum(prevInsights, 'impressions')
-  const pviews7      = sum(insights, 'profileViews')
-  const prevPviews   = sum(prevInsights, 'profileViews')
-  const wclicks7     = sum(insights, 'websiteClicks')
-  const prevWclicks  = sum(prevInsights, 'websiteClicks')
-  const gain7        = sum(insights, 'followerGain')
-  const prevGain     = sum(prevInsights, 'followerGain')
+  const reach7 = sum(insights, 'reach')
+  const prevReach = sum(prevInsights, 'reach')
+  const impr7 = sum(insights, 'impressions')
+  const prevImpr = sum(prevInsights, 'impressions')
+  const pviews7 = sum(insights, 'profileViews')
+  const prevPviews = sum(prevInsights, 'profileViews')
+  const wclicks7 = sum(insights, 'websiteClicks')
+  const prevWclicks = sum(prevInsights, 'websiteClicks')
+  const gain7 = sum(insights, 'followerGain')
+  const prevGain = sum(prevInsights, 'followerGain')
+
+  // Detecta métricas que ainda não têm dados (aguardando permissão da Meta)
+  const hasReach       = sum(allInsights, 'reach') > 0
+  const hasImpressions = sum(allInsights, 'impressions') > 0
+  const hasProfileViews   = sum(allInsights, 'profileViews') > 0
+  const hasWebsiteClicks  = sum(allInsights, 'websiteClicks') > 0
+
   const latestFollow = allInsights.length > 0
-    ? allInsights[allInsights.length - 1].followerCount
+    ? (allInsights[allInsights.length - 1].followerCount || profile?.followersCount || 0)
     : (profile?.followersCount ?? 0)
 
   // Charts data
@@ -245,7 +306,7 @@ export function InstagramPageFull() {
   }, [audience])
 
   const totalAudienceCountry = topCountries.reduce((s, [, v]) => s + v, 0)
-  const totalAudienceCity    = topCities.reduce((s, [, v]) => s + v, 0)
+  const totalAudienceCity = topCities.reduce((s, [, v]) => s + v, 0)
 
   // Top posts with insights
   const topPostsWithInsights = useMemo(() =>
@@ -283,15 +344,23 @@ export function InstagramPageFull() {
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 via-purple-500 to-orange-400 flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-lg">
-              {profile?.username?.slice(0, 1).toUpperCase() ?? 'I'}
-            </span>
-          </div>
+          {ACCOUNT_LOGOS[account] ? (
+            <img
+              src={ACCOUNT_LOGOS[account]}
+              alt={account}
+              className="w-12 h-12 rounded-full object-contain bg-card border border-border/60 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 via-purple-500 to-orange-400 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-lg">
+                {account.slice(0, 1).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-foreground leading-none">
-                @{profile?.username ?? 'imirante'}
+                @{profile?.username ?? account}
               </h1>
               {profile?.website && (
                 <a href={profile.website} target="_blank" rel="noopener noreferrer"
@@ -300,7 +369,7 @@ export function InstagramPageFull() {
                 </a>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{profile?.name ?? 'Imirante'}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{profile?.name ?? account}</p>
             {profile?.biography && (
               <p className="text-[11px] text-muted-foreground/70 mt-1 max-w-sm line-clamp-2">{profile.biography}</p>
             )}
@@ -343,16 +412,16 @@ export function InstagramPageFull() {
             <p className="text-muted-foreground">Contagem atual da conta. O delta compara o ganho/perda de seguidores deste período vs o anterior.</p>
           </>} />
         <KpiCard label={`Alcance · ${period}d`} value={fmtN(reach7)}
-          delta={pctDelta(reach7, prevReach)}
+          delta={pctDelta(reach7, prevReach)} pending={!hasReach}
           icon={<Eye className="w-3.5 h-3.5" />} accent="text-green-400" />
         <KpiCard label={`Impressões · ${period}d`} value={fmtN(impr7)}
-          delta={pctDelta(impr7, prevImpr)}
+          delta={pctDelta(impr7, prevImpr)} pending={!hasImpressions}
           icon={<TrendingUp className="w-3.5 h-3.5" />} accent="text-primary" />
         <KpiCard label={`Visitas ao perfil · ${period}d`} value={fmtN(pviews7)}
-          delta={pctDelta(pviews7, prevPviews)}
+          delta={pctDelta(pviews7, prevPviews)} pending={!hasProfileViews}
           icon={<InstagramIcon className="w-3.5 h-3.5" />} />
         <KpiCard label={`Cliques no link · ${period}d`} value={fmtN(wclicks7)}
-          delta={pctDelta(wclicks7, prevWclicks)}
+          delta={pctDelta(wclicks7, prevWclicks)} pending={!hasWebsiteClicks}
           icon={<Globe className="w-3.5 h-3.5" />} accent="text-yellow-400" />
         <KpiCard label={`Novos seguidores · ${period}d`}
           value={gain7 >= 0 ? `+${fmtN(gain7)}` : fmtN(gain7)}
@@ -368,17 +437,35 @@ export function InstagramPageFull() {
           {followerChart.length === 0 ? (
             <p className="text-xs text-muted-foreground italic text-center py-8">Sem dados para o período.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <ComposedChart data={followerChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={50} tickFormatter={fmtN} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={40} />
-                <Tooltip content={<ChartTooltip formatter={fmtN} />} />
-                <Bar yAxisId="right" dataKey="ganho" name="ganho" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
-                <Line yAxisId="left" type="monotone" dataKey="seguidores" name="seguidores" stroke="#f472b6" strokeWidth={2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <>
+              <div className="flex items-center gap-5 mb-3 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 bg-pink-400 rounded-full inline-block" />
+                  Total de seguidores (eixo esq.)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-2 bg-green-500/50 rounded-sm inline-block" />
+                  Ganho do dia (eixo dir.)
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <ComposedChart data={followerChart} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis yAxisId="left" orientation="left"
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    axisLine={false} tickLine={false} width={52} tickFormatter={fmtN}
+                  />
+                  <YAxis yAxisId="right" orientation="right"
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    axisLine={false} tickLine={false} width={36}
+                  />
+                  <Tooltip content={<FollowerTooltip />} />
+                  <Bar yAxisId="right" dataKey="ganho" name="ganho" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="left" type="monotone" dataKey="seguidores" name="seguidores" stroke="#f472b6" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </>
           )}
         </CardContent>
       </Card>
@@ -388,56 +475,60 @@ export function InstagramPageFull() {
         <Card className="border-border/60">
           <CardContent className="p-5">
             <SectionTitle title="Alcance e Impressões" sub={`· ${period}d`} />
-            {reachChart.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic text-center py-8">Sem dados.</p>
+            {!hasReach && !hasImpressions ? (
+              <MiningPlaceholder metric="alcance e impressões" />
             ) : (
-              <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={reachChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={45} tickFormatter={fmtN} />
-                  <Tooltip content={<ChartTooltip formatter={fmtN} />} />
-                  <Line type="monotone" dataKey="alcance" stroke="hsl(142 76% 36%)" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="impressões" stroke="hsl(210 100% 56%)" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <>
+                <ResponsiveContainer width="100%" height={160}>
+                  <LineChart data={reachChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={45} tickFormatter={fmtN} />
+                    <Tooltip content={<ChartTooltip formatter={fmtN} />} />
+                    <Line type="monotone" dataKey="alcance" stroke="hsl(142 76% 36%)" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="impressões" stroke="hsl(210 100% 56%)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-4 mt-3">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-3 h-0.5 bg-green-500 rounded-full inline-block" />alcance
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-3 h-0.5 bg-primary rounded-full inline-block" />impressões
+                  </span>
+                </div>
+              </>
             )}
-            <div className="flex items-center gap-4 mt-3">
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="w-3 h-0.5 bg-green-500 rounded-full inline-block" />alcance
-              </span>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="w-3 h-0.5 bg-primary rounded-full inline-block" />impressões
-              </span>
-            </div>
           </CardContent>
         </Card>
 
         <Card className="border-border/60">
           <CardContent className="p-5">
             <SectionTitle title="Visitas ao perfil e cliques" sub={`· ${period}d`} />
-            {profileChart.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic text-center py-8">Sem dados.</p>
+            {!hasProfileViews && !hasWebsiteClicks ? (
+              <MiningPlaceholder metric="visitas e cliques" />
             ) : (
-              <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={profileChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={40} tickFormatter={fmtN} />
-                  <Tooltip content={<ChartTooltip formatter={fmtN} />} />
-                  <Line type="monotone" dataKey="visitas ao perfil" stroke="#a78bfa" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="cliques no link" stroke="#fbbf24" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <>
+                <ResponsiveContainer width="100%" height={160}>
+                  <LineChart data={profileChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} width={40} tickFormatter={fmtN} />
+                    <Tooltip content={<ChartTooltip formatter={fmtN} />} />
+                    <Line type="monotone" dataKey="visitas ao perfil" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="cliques no link" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-4 mt-3">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-3 h-0.5 bg-violet-400 rounded-full inline-block" />visitas
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-3 h-0.5 bg-yellow-400 rounded-full inline-block" />cliques no link
+                  </span>
+                </div>
+              </>
             )}
-            <div className="flex items-center gap-4 mt-3">
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="w-3 h-0.5 bg-violet-400 rounded-full inline-block" />visitas
-              </span>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="w-3 h-0.5 bg-yellow-400 rounded-full inline-block" />cliques no link
-              </span>
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -626,15 +717,6 @@ export function InstagramPageFull() {
         </CardContent>
       </Card>
 
-      {!audience && !loading && (
-        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-xs text-muted-foreground">
-          <strong className="text-yellow-500">Dados de audiência</strong> (gênero, idade, países, cidades) ainda não foram sincronizados.
-          Force uma sincronização agora:
-          <code className="block mt-2 bg-secondary rounded px-2 py-1 text-[11px] font-mono">
-            gcloud functions call syncInsights --project radarimirante --region southamerica-east1
-          </code>
-        </div>
-      )}
     </div>
   )
 }

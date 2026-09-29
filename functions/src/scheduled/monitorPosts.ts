@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin'
 import type { RadarPost, RadarComment, PostStatus } from '../types/radar'
-import { RADAR_CONFIG } from '../config/radar'
+import { RADAR_CONFIG, ACCOUNT_PROFILES, PROFILE_SCORING } from '../config/radar'
 import { createSnapshot } from '../radar/snapshots'
 import { getBucket, getPostAgeMinutes, getBaseline } from '../radar/baseline'
 import { calculatePenalties } from '../radar/penalties'
@@ -48,13 +48,17 @@ async function processPost(
     // 2. Snapshot com métricas atuais
     const snapshot = await createSnapshot(db, post.id, comments, post.metrics)
 
-    // 3. Baseline para comparação
+    // 3. Baseline para comparação (por conta se disponível, senão global)
     const ageMinutes = getPostAgeMinutes(post.publishedAt)
     const bucket = getBucket(ageMinutes)
-    const baseline = await getBaseline(db, post.platform, bucket)
+    const baseline = await getBaseline(db, post.platform, bucket, post.account)
 
     const baselineP90 = baseline?.p90 ?? 0
     const baselineP75 = baseline?.p75 ?? 0
+
+    // Tetos de scoring calibrados pelo perfil da conta
+    const profile = ACCOUNT_PROFILES[post.account ?? ''] ?? 'editorial'
+    const scoring = PROFILE_SCORING[profile]
 
     // 4. Penalidades
     const penalties = calculatePenalties(comments)
@@ -71,6 +75,9 @@ async function processPost(
       spamRatio: penalties.spamRatio,
       duplicateRatio: penalties.duplicateRatio,
       authorConcentration: penalties.authorConcentration,
+      commentCeiling: scoring.commentCeiling,
+      velocityMax: scoring.velocityMaxPerMin,
+      uniqueAuthorMax: scoring.uniqueAuthorMax,
     })
 
     // 6. Baseline comparison (% acima do p90)
@@ -100,11 +107,11 @@ async function processPost(
       snapshot.comments >= RADAR_CONFIG.trend.minComments
 
     if (eligible) {
-      // Verifica se precisa re-analisar (tem analysis run anterior?)
+      // Verifica se precisa re-analisar — considera qualquer run recente (completed ou failed)
+      // para evitar re-enfileiramento infinito quando a análise falha (ex: créditos esgotados).
       const lastRunSnap = await db
         .collection('analysisRuns')
         .where('postId', '==', post.id)
-        .where('status', '==', 'completed')
         .orderBy('createdAt', 'desc')
         .limit(1)
         .get()
@@ -113,14 +120,18 @@ async function processPost(
 
       if (!lastRunSnap.empty) {
         const lastRun = lastRunSnap.docs[0].data()
-        const { should } = await shouldReanalyze(
-          lastRun.commentsAtTrigger,
-          snapshot.comments,
-          lastRun.scoreAtTrigger,
-          breakdown.finalScore,
-          lastRun.createdAt.toDate(),
-        )
-        shouldQueue = should
+        if (lastRun.status === 'running') {
+          shouldQueue = false
+        } else {
+          const { should } = await shouldReanalyze(
+            lastRun.commentsAtTrigger,
+            snapshot.comments,
+            lastRun.scoreAtTrigger,
+            breakdown.finalScore,
+            lastRun.createdAt.toDate(),
+          )
+          shouldQueue = should
+        }
       }
 
       if (shouldQueue) {

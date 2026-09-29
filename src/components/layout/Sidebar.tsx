@@ -2,43 +2,58 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Radio, Settings, ChevronLeft, ChevronRight,
-  LayoutDashboard, Sparkles, Instagram, BarChart2, ChevronDown, Check,
+  LayoutDashboard, Sparkles, Instagram, ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAccount } from '@/contexts/AccountContext'
 import imiranteLogo from '@/assets/imirante_logo.png'
 import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
+import tvmiranteLogo from '@/assets/tvmirante_logo.png'
 
 const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
   imiranteesporte: imiranteEsporteLogo,
+  tvmirante: tvmiranteLogo,
 }
 
 const NAV_GROUPS = [
   {
     label: 'Principal',
     items: [
-      { to: '/radar',     icon: Radio,          label: 'Radar',         desc: 'Feed em tempo real' },
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard',     desc: 'Estatísticas gerais' },
+      { to: '/radar',     icon: Radio,           label: 'Radar',         desc: 'Feed em tempo real' },
+      { to: '/dashboard', icon: LayoutDashboard,  label: 'Dashboard',     desc: 'Estatísticas gerais' },
     ],
   },
   {
     label: 'Conteúdo',
     items: [
-      { to: '/analises',  icon: Sparkles,        label: 'Análises',      desc: 'Pautas geradas pela IA' },
-      { to: '/instagram', icon: Instagram,        label: 'Instagram',     desc: 'Métricas do perfil' },
+      { to: '/analises',  icon: Sparkles,   label: 'Análises',      desc: 'Pautas geradas pela IA' },
+      { to: '/instagram', icon: Instagram,  label: 'Instagram',     desc: 'Métricas do perfil' },
     ],
   },
   {
     label: 'Sistema',
     items: [
-      { to: '/settings',  icon: Settings,        label: 'Configurações', desc: 'Conta e preferências' },
+      { to: '/settings', icon: Settings, label: 'Configurações', desc: 'Conta e preferências' },
     ],
   },
 ]
 
 function getCollapsed(): boolean {
   try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
+}
+
+function AccountLogo({ id, size = 8 }: { id: string; size?: number }) {
+  const logo = ACCOUNT_LOGOS[id]
+  const cls = `w-${size} h-${size}`
+  if (logo) {
+    return (
+      <div className={cn(cls, 'rounded-xl overflow-hidden flex-shrink-0 bg-white')}>
+        <img src={logo} alt={id} className="w-full h-full object-contain p-1" />
+      </div>
+    )
+  }
+  return null
 }
 
 export function Sidebar() {
@@ -65,47 +80,58 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex-shrink-0 flex flex-col border-r border-border bg-card transition-all duration-200',
-        collapsed ? 'w-14' : 'w-56',
+        'flex-shrink-0 flex flex-col bg-card border-r border-border/60 transition-all duration-200 relative overflow-hidden',
+        collapsed ? 'w-[60px]' : 'w-[230px]',
       )}
     >
-      {/* Header: account switcher collapsible */}
-      <div className="border-b border-border">
+      {/* Top accent line */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px]"
+        style={{ background: `linear-gradient(90deg, ${color}cc, ${color}33, transparent)` }}
+      />
+
+      {/* ── Account Switcher ─────────────────────────────────────── */}
+      <div className="border-b border-border/50">
         <button
           onClick={() => !collapsed && setSwitcherOpen(v => !v)}
           className={cn(
-            'w-full flex items-center transition-colors',
-            collapsed ? 'h-14 justify-center px-0' : 'gap-3 px-3 py-3 hover:bg-accent/40',
+            'w-full flex items-center transition-colors duration-150',
+            collapsed ? 'h-[60px] justify-center' : 'gap-3 px-3 py-3',
+            !collapsed && 'hover:bg-accent/30',
+            !collapsed && switcherOpen && 'bg-accent/20',
           )}
         >
-          {ACCOUNT_LOGOS[account] ? (
-            <img
-              src={ACCOUNT_LOGOS[account]}
-              alt={currentConfig?.displayName ?? account}
-              className="w-8 h-8 rounded-xl object-cover flex-shrink-0 shadow-sm ring-2"
-              style={{ outline: `2px solid ${color}55`, outlineOffset: '1px' }}
-            />
-          ) : (
-            <div
-              className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm"
+          {/* Logo */}
+          <div className="relative flex-shrink-0">
+            <AccountLogo id={account} size={9} />
+            {!ACCOUNT_LOGOS[account] && (
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                style={{ backgroundColor: color }}
+              >
+                {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
+              </div>
+            )}
+            {/* Status dot */}
+            <span
+              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card"
               style={{ backgroundColor: color }}
-            >
-              {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
-            </div>
-          )}
+            />
+          </div>
+
           {!collapsed && (
             <>
               <div className="min-w-0 flex-1 text-left">
-                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider leading-none mb-0.5">
-                  Radar
-                </p>
-                <p className="text-sm font-bold text-foreground leading-tight truncate">
+                <p className="text-sm font-semibold text-foreground truncate leading-tight">
                   {currentConfig?.displayName ?? account}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+                  @{account}
                 </p>
               </div>
               <ChevronDown
                 className={cn(
-                  'w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0 transition-transform duration-200',
+                  'w-4 h-4 text-muted-foreground/50 flex-shrink-0 transition-transform duration-200',
                   switcherOpen && 'rotate-180',
                 )}
               />
@@ -113,58 +139,61 @@ export function Sidebar() {
           )}
         </button>
 
+        {/* Account dropdown */}
         {!collapsed && (
           <div className={cn(
-            'overflow-hidden transition-all duration-300 ease-in-out',
-            switcherOpen ? 'max-h-32' : 'max-h-0',
+            'grid transition-[grid-template-rows] duration-200 ease-in-out',
+            switcherOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
           )}>
-            <div className="px-2 pb-2.5 pt-1 space-y-0.5">
-              {accounts.map(acc => {
-                const active = acc.id === account
-                const logo = ACCOUNT_LOGOS[acc.id]
-                return (
-                  <button
-                    key={acc.id}
-                    onClick={() => selectAccount(acc.id)}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-2.5 py-2 rounded-lg transition-all duration-150',
-                      active
-                        ? 'bg-accent text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-                    )}
-                  >
-                    {logo ? (
-                      <img
-                        src={logo}
-                        alt={acc.displayName}
-                        className="w-7 h-7 rounded-lg object-cover flex-shrink-0 ring-1 ring-border/30"
-                      />
-                    ) : (
-                      <div
-                        className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold"
-                        style={{ backgroundColor: acc.color }}
-                      >
-                        {acc.shortName[0]?.toUpperCase()}
-                      </div>
-                    )}
-                    <span className="flex-1 text-left text-xs font-semibold truncate">
-                      {acc.displayName}
-                    </span>
-                    {active && <Check className="w-3.5 h-3.5 flex-shrink-0 text-primary" />}
-                  </button>
-                )
-              })}
+            <div className="overflow-hidden">
+              <div className="px-2 py-2 space-y-0.5 border-t border-border/40">
+                <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest px-2 pb-1 select-none">
+                  Trocar conta
+                </p>
+                {accounts.map(acc => {
+                  const active = acc.id === account
+                  return (
+                    <button
+                      key={acc.id}
+                      onClick={() => selectAccount(acc.id)}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 text-left',
+                        active
+                          ? 'bg-accent/60 text-foreground'
+                          : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground',
+                      )}
+                    >
+                      {ACCOUNT_LOGOS[acc.id] ? (
+                        <div className="w-6 h-6 rounded-lg overflow-hidden flex-shrink-0 bg-white">
+                          <img src={ACCOUNT_LOGOS[acc.id]} alt={acc.displayName}
+                            className="w-full h-full object-contain p-0.5"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-[9px] font-bold"
+                          style={{ backgroundColor: acc.color }}>
+                          {acc.shortName[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <span className="flex-1 text-xs font-medium truncate">{acc.displayName}</span>
+                      {active && (
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: acc.color }} />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
+      {/* ── Navigation ──────────────────────────────────────────── */}
+      <nav className="flex-1 px-2 py-4 space-y-5 overflow-y-auto">
         {NAV_GROUPS.map(group => (
           <div key={group.label}>
             {!collapsed && (
-              <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1 pb-1.5">
+              <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-[0.1em] px-2.5 pb-2 select-none">
                 {group.label}
               </p>
             )}
@@ -175,36 +204,35 @@ export function Sidebar() {
                   to={to}
                   end={to === '/radar'}
                   title={collapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center rounded-md transition-all duration-150 group relative',
-                      collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
-                      isActive
-                        ? 'text-foreground'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                    )
+                  className={({ isActive }) => cn(
+                    'flex items-center rounded-lg transition-all duration-150 group',
+                    collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
+                    isActive
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/40',
+                  )}
+                  style={({ isActive }) => isActive
+                    ? { backgroundColor: color + '14', boxShadow: `inset 3px 0 0 ${color}` }
+                    : undefined
                   }
-                  style={({ isActive }) => isActive ? { backgroundColor: color + '18' } : undefined}
                 >
                   {({ isActive }) => (
                     <>
-                      {isActive && (
-                        <span
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
-                          style={{ backgroundColor: color }}
-                        />
-                      )}
                       <Icon
-                        className="flex-shrink-0 w-4 h-4"
+                        className="flex-shrink-0 w-4 h-4 transition-colors"
                         style={isActive ? { color } : undefined}
                       />
                       {!collapsed && (
                         <div className="min-w-0">
-                          <p
-                            className="text-sm font-medium leading-tight truncate"
-                            style={isActive ? { color } : undefined}
-                          >{label}</p>
-                          <p className="text-[10px] text-muted-foreground/60 truncate leading-tight">{desc}</p>
+                          <p className={cn(
+                            'text-sm leading-tight truncate',
+                            isActive ? 'font-semibold text-foreground' : 'font-medium',
+                          )}>
+                            {label}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground leading-tight mt-0.5 truncate">
+                            {desc}
+                          </p>
                         </div>
                       )}
                     </>
@@ -216,38 +244,20 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Info box */}
-      {!collapsed && (
-        <div className="px-3 pb-2">
-          <div
-            className="rounded-md p-2.5 space-y-1"
-            style={{ backgroundColor: color + '12', borderWidth: 1, borderStyle: 'solid', borderColor: color + '30' }}
+      {/* ── Footer ──────────────────────────────────────────────── */}
+      <div className="border-t border-border/50 px-2 py-2">
+        <div className="flex items-center justify-end">
+          <button
+            onClick={toggle}
+            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors"
           >
-            <div className="flex items-center gap-1.5">
-              <BarChart2 className="w-3 h-3" style={{ color: color + 'cc' }} />
-              <p className="text-[10px] font-semibold" style={{ color: color + 'cc' }}>
-                {currentConfig ? `Radar ${currentConfig.shortName}` : 'Mirante Radar'}
-              </p>
-            </div>
-            <p className="text-[9px] text-muted-foreground leading-relaxed">
-              Inteligência editorial em tempo real para a redação.
-            </p>
-          </div>
+            {collapsed
+              ? <ChevronRight className="w-3.5 h-3.5" />
+              : <ChevronLeft className="w-3.5 h-3.5" />
+            }
+          </button>
         </div>
-      )}
-
-      {/* Collapse toggle */}
-      <div className={cn('border-t border-border flex items-center p-2', collapsed ? 'justify-center' : 'justify-between px-3')}>
-        {!collapsed && (
-          <p className="text-[10px] text-muted-foreground/40">v0.2.0</p>
-        )}
-        <button
-          onClick={toggle}
-          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-accent transition-colors"
-        >
-          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-        </button>
       </div>
     </aside>
   )

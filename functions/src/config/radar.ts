@@ -1,6 +1,22 @@
 // Espelha src/config/radar.ts do frontend.
 // Fonte única de configuração para o backend.
 
+// Mapeamento estático de conta → perfil.
+// Atualizar ao adicionar novas contas em getActiveAccounts().
+export const ACCOUNT_PROFILES: Record<string, 'editorial' | 'viral'> = {
+  imirante:        'editorial',
+  tvmirante:       'viral',
+  imiranteesporte: 'viral',
+}
+
+// Tetos de scoring por perfil.
+// 'editorial': conta grande, alto engajamento (iMirante)
+// 'viral':     conta menor, engajamento mais baixo — tetos menores = maior sensibilidade
+export const PROFILE_SCORING = {
+  editorial: { commentCeiling: 300, velocityMaxPerMin: 2.0, uniqueAuthorMax: 20 },
+  viral:     { commentCeiling: 75,  velocityMaxPerMin: 0.5, uniqueAuthorMax: 8  },
+} as const
+
 export const RADAR_CONFIG = {
   monitoring: {
     activePostHours: 72,
@@ -14,10 +30,10 @@ export const RADAR_CONFIG = {
   },
 
   analysis: {
-    reanalyzeGrowthPercentage: 40,
+    reanalyzeGrowthPercentage: 60,
     maxCommentsPerAnalysis: 300,
-    minIntervalBetweenAnalysisHours: 2,
-    reanalyzeScoreIncrease: 15,
+    minIntervalBetweenAnalysisHours: 12,
+    reanalyzeScoreIncrease: 20,
   },
 
   score: {

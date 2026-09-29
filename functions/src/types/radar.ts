@@ -2,9 +2,12 @@ import type { firestore } from 'firebase-admin'
 
 type Timestamp = firestore.Timestamp
 
-// ─── Plataformas ──────────────────────────────────────────────────────────────
+// ─── Plataformas e perfis de conta ───────────────────────────────────────────
 
 export type SocialPlatform = 'imirante' | 'instagram' | 'facebook' | 'youtube' | 'x'
+
+// Perfil determina qual prompt de IA e qual schema de análise usar
+export type AccountProfile = 'editorial' | 'viral'
 
 // ─── Post ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +24,7 @@ export interface PostMetrics {
 export interface RadarPost {
   id: string
   externalId: string
+  account: string          // ID interno da conta (ex: 'imirante', 'tvmirante')
   platform: SocialPlatform
   url: string
   title?: string
@@ -103,7 +107,7 @@ export interface TrendScoreBreakdown {
   confidence: number
 }
 
-// ─── Análise Editorial ────────────────────────────────────────────────────────
+// ─── Análises ─────────────────────────────────────────────────────────────────
 
 export type StoryPriority = 'low' | 'medium' | 'high'
 
@@ -144,6 +148,30 @@ export interface EditorialAnalysis {
   confidence: number
 }
 
+// ─── Análise Viral (perfil: entretenimento/TV) ────────────────────────────────
+
+export type ContentUrgency = 'now' | 'this_week' | 'monitor'
+
+export interface ContentIdea {
+  concept: string
+  format: string       // ex: "Reel", "Stories", "Post estático"
+  rationale: string
+  urgency: ContentUrgency
+}
+
+export interface ViralAnalysis {
+  mainTopic: string
+  summary: string
+  whyTrending: string
+  clusters: TopicCluster[]
+  emotionalTriggers: string[]       // emoções que movem o engajamento
+  contentInsights: string[]         // o que está funcionando no conteúdo
+  audienceSignals: string[]         // o que a audiência quer ver mais
+  contentRecommendations: ContentIdea[]
+  viralPotential: number            // 0–100
+  confidence: number                // 0–1
+}
+
 // ─── Analysis Run ─────────────────────────────────────────────────────────────
 
 export type AnalysisRunStatus = 'pending' | 'running' | 'completed' | 'failed'
@@ -157,7 +185,7 @@ export interface AnalysisRun {
   triggeredBy: AnalysisTrigger
   scoreAtTrigger: number
   commentsAtTrigger: number
-  analysis?: EditorialAnalysis
+  analysis?: EditorialAnalysis | ViralAnalysis
   error?: string
   startedAt?: Timestamp
   finishedAt?: Timestamp
@@ -171,6 +199,8 @@ export type OpportunityStatus = 'new' | 'reviewing' | 'investigated' | 'publishe
 export interface Opportunity {
   id: string
   postId: string
+  account: string
+  profile: AccountProfile
   platform: SocialPlatform
   postUrl: string
   postTitle?: string
@@ -178,15 +208,8 @@ export interface Opportunity {
   summary: string
   whyTrending: string
   clusters: TopicCluster[]
-  audienceQuestions: string[]
-  complaints: string[]
-  reports: string[]
-  claimsToVerify: ClaimToVerify[]
-  editorialSignals: string[]
-  storyIdeas: StoryIdea[]
   trendScore: number
   trendConfidence: number
-  editorialPotential: number
   analysisConfidence: number
   commentsAtAnalysis: number
   metricsAtAnalysis: PostMetrics
@@ -195,6 +218,20 @@ export interface Opportunity {
   createdAt: Timestamp
   updatedAt: Timestamp
   lastAnalysisAt: Timestamp
+  // Campos exclusivos do perfil editorial
+  audienceQuestions?: string[]
+  complaints?: string[]
+  reports?: string[]
+  claimsToVerify?: ClaimToVerify[]
+  editorialSignals?: string[]
+  storyIdeas?: StoryIdea[]
+  editorialPotential?: number
+  // Campos exclusivos do perfil viral
+  emotionalTriggers?: string[]
+  contentInsights?: string[]
+  audienceSignals?: string[]
+  contentRecommendations?: ContentIdea[]
+  viralPotential?: number
 }
 
 // ─── Editorial Feedback ───────────────────────────────────────────────────────
