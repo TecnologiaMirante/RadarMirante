@@ -19,6 +19,8 @@ import { InfoTip } from '@/components/ui/InfoTip'
 import { useRadar } from '@/hooks/useRadar'
 import { useAccount, ACCOUNT_COLORS, ACCOUNT_PAGE_TITLES } from '@/contexts/AccountContext'
 import { getRecentCommentTexts } from '@/services/radar'
+import { getDoc, doc } from 'firebase/firestore'
+import { db } from '@/services/firebase'
 import type { SortOption, RadarPost } from '@/types/radar'
 import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
 import { cn } from '@/lib/utils'
@@ -174,6 +176,18 @@ export default function Radar() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 30
+  const [lastMonitorRun, setLastMonitorRun] = useState<Date | null>(null)
+
+  useEffect(() => {
+    getDoc(doc(db, 'systemHealth', 'monitorPosts'))
+      .then(snap => {
+        if (snap.exists()) {
+          const ts = snap.data()?.lastRun
+          if (ts?.toDate) setLastMonitorRun(ts.toDate() as Date)
+        }
+      })
+      .catch(() => { /* silently ignore */ })
+  }, [])
 
   useEffect(() => {
     setCloudLoading(true)
@@ -391,6 +405,11 @@ export default function Radar() {
             <h1 className="text-xl font-bold text-foreground leading-none">{pageTitle}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {loading ? 'Carregando…' : `${posts.length} publicações · ${getPresetLabel(filters.time, filters.customFrom, filters.customTo, overrideAllLabel).toLowerCase()}`}
+              {lastMonitorRun && (
+                <span className="text-muted-foreground/50 ml-1">
+                  · coletado {formatDistanceToNow(lastMonitorRun, { addSuffix: true, locale: ptBR })}
+                </span>
+              )}
             </p>
           </div>
         </div>

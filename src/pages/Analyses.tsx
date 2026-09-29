@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Sparkles, ArrowUpRight, TrendingUp, MessageCircle,
-  Clock, RefreshCw, Filter, ArrowDownUp,
+  Clock, RefreshCw, Filter, ArrowDownUp, Download,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -262,6 +262,35 @@ export default function AnalysesPage() {
 
   const timeLabel = getPresetLabel(displayTime, customFrom, customTo)
 
+  function exportCsv() {
+    const rows = [
+      ['Tópico', 'Resumo', 'Score', 'Potencial', 'Status', 'Pautas urgentes', 'Total pautas', 'Criado em'],
+      ...filtered.map(o => {
+        const highIdeas  = o.storyIdeas?.filter(i => i.priority === 'high').length ?? 0
+        const totalIdeas = o.storyIdeas?.length ?? 0
+        const createdAt  = (o.createdAt as unknown as Timestamp).toDate().toLocaleDateString('pt-BR')
+        return [
+          o.mainTopic,
+          (o.summary ?? '').replace(/\n/g, ' '),
+          String(o.trendScore),
+          String(o.editorialPotential),
+          STATUS_CONFIG[o.status]?.label ?? o.status,
+          String(highIdeas),
+          String(totalIdeas),
+          createdAt,
+        ]
+      }),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `analises-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -306,6 +335,15 @@ export default function AnalysesPage() {
             customTo={customTo}
             onChange={(time, from, to) => setDisplayTime(time, from, to)}
           />
+          <Button
+            variant="outline" size="sm"
+            onClick={exportCsv}
+            disabled={filtered.length === 0}
+            title="Exportar lista como CSV"
+            className="gap-1.5 h-8 text-xs"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="gap-1.5 h-8 text-xs">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>

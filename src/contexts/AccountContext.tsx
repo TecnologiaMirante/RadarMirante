@@ -80,8 +80,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   // Compute visible accounts based on role
   const accounts = useMemo<RadarAccountConfig[]>(() => {
+    if (authLoading || !firestoreReady) return []
     const active = allAccounts.filter(a => a.active)
-    if (authLoading || !firestoreReady) return active
     if (role === 'superadmin' || role === 'admin') return active
     return active.filter(a => userAccounts.includes(a.id))
   }, [allAccounts, firestoreReady, authLoading, role, userAccounts])

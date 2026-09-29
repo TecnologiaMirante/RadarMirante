@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Copy, Check, Pencil, Trash2, Users, Globe } from 'lucide-react'
+import { Eye, EyeOff, Copy, Check, Pencil, Trash2, Users } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   CREDENTIAL_PLATFORM_LABELS, CREDENTIAL_LOGIN_LABELS,
@@ -18,12 +18,12 @@ const PLATFORM_ICON_MAP: Record<string, React.FC<{ size?: number }>> = {
 
 interface Props {
   credential: Credential
-  isAdmin: boolean
+  canManage: boolean
   onEdit: (c: Credential) => void
   onDelete: (c: Credential) => void
 }
 
-export function CredentialCard({ credential, isAdmin, onEdit, onDelete }: Props) {
+export function CredentialCard({ credential, canManage, onEdit, onDelete }: Props) {
   const [showPass, setShowPass] = useState(false)
   const [copiedEmail, setCopiedEmail] = useState(false)
   const [copiedPass, setCopiedPass] = useState(false)
@@ -36,11 +36,9 @@ export function CredentialCard({ credential, isAdmin, onEdit, onDelete }: Props)
     } catch {}
   }
 
-  const visibilityLabel = credential.visibleTo === 'all'
-    ? 'Toda a equipe'
-    : Array.isArray(credential.visibleTo)
-      ? `${credential.visibleTo.length} pessoa${credential.visibleTo.length !== 1 ? 's' : ''}`
-      : 'Restrito'
+  const visibilityLabel = Array.isArray(credential.visibleTo)
+    ? `${credential.visibleTo.length} pessoa${credential.visibleTo.length !== 1 ? 's' : ''}`
+    : 'Restrito'
 
   return (
     <Card className="border-border/60 hover:border-border transition-colors">
@@ -65,18 +63,15 @@ export function CredentialCard({ credential, isAdmin, onEdit, onDelete }: Props)
                 </span>
                 <span className="text-muted-foreground/30">·</span>
                 <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/70">
-                  {credential.visibleTo === 'all'
-                    ? <Globe className="w-2.5 h-2.5" />
-                    : <Users className="w-2.5 h-2.5" />
-                  }
+                  <Users className="w-2.5 h-2.5" />
                   {visibilityLabel}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Admin actions */}
-          {isAdmin && (
+          {/* Actions */}
+          {canManage && (
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={() => onEdit(credential)}

@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MessageCircle, Heart, Share2, Eye,
   Clock, Sparkles, FileText, ChevronDown, ChevronUp,
   AlertTriangle, RefreshCw, TrendingUp, Zap,
-  HelpCircle, BookOpen, ArrowUpRight,
+  HelpCircle, BookOpen, ArrowUpRight, Download,
   Instagram, ExternalLink,
 } from 'lucide-react'
 import { InfoTip } from '@/components/ui/InfoTip'
+import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import type {
   TopicCluster, ClaimToVerify,
 } from '@/types/radar'
 import { cn } from '@/lib/utils'
+import { useAccount } from '@/contexts/AccountContext'
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -736,9 +738,81 @@ function PostHeader({ post, publishedAgo }: { post: RadarPost; publishedAgo: str
 
 type Tab = 'analysis' | 'comments'
 
+function buildExportText(post: RadarPost, opp: Opportunity | null): string {
+  const sep = '─'.repeat(60)
+  const lines: string[] = [
+    'RADAR IMIRANTE — EXPORTAÇÃO',
+    sep,
+    '',
+    `Post: ${post.url}`,
+    `Publicado: ${post.publishedAt.toDate().toLocaleString('pt-BR')}`,
+    `Plataforma: ${post.platform}`,
+    `Comentários: ${post.metrics.comments.toLocaleString('pt-BR')}`,
+    `Curtidas: ${post.metrics.likes.toLocaleString('pt-BR')}`,
+    `Score de tendência: ${post.trendScore}`,
+  ]
+  if (post.text) {
+    lines.push('', 'Texto da publicação:', post.text)
+  }
+  if (!opp) {
+    lines.push('', sep, 'Nenhuma análise editorial gerada para este post.')
+    return lines.join('\n')
+  }
+  lines.push('', sep, '', `ANÁLISE EDITORIAL — ${opp.mainTopic}`)
+  lines.push(`Potencial editorial: ${opp.editorialPotential}/100`)
+  if (opp.summary) lines.push('', opp.summary)
+  if (opp.whyTrending) lines.push('', 'Por que está em alta:', opp.whyTrending)
+  if (opp.storyIdeas?.length) {
+    lines.push('', 'PAUTAS SUGERIDAS:')
+    opp.storyIdeas.forEach((idea, i) => {
+      const prio = idea.priority === 'high' ? 'URGENTE' : idea.priority === 'medium' ? 'RELEVANTE' : 'MONITORE'
+      lines.push(``, `${i + 1}. [${prio}] ${idea.headline}`)
+      if (idea.angle)   lines.push(`   Ângulo: ${idea.angle}`)
+      if (idea.whyNow)  lines.push(`   Por que agora: ${idea.whyNow}`)
+      if (idea.questionsToAnswer?.length) {
+        lines.push(`   O que investigar:`)
+        idea.questionsToAnswer.forEach(q => lines.push(`   → ${q}`))
+      }
+    })
+  }
+  if (opp.audienceQuestions?.length) {
+    lines.push('', 'O QUE A AUDIÊNCIA QUER SABER:')
+    opp.audienceQuestions.forEach(q => lines.push(`• ${q}`))
+  }
+  if (opp.claimsToVerify?.length) {
+    lines.push('', 'ALEGAÇÕES PARA VERIFICAR:')
+    opp.claimsToVerify.forEach(c => lines.push(`• "${c.claim}"  (~${c.approximateMentions} menções)`))
+  }
+  if (opp.editorialSignals?.length) {
+    lines.push('', 'SINAIS EDITORIAIS:')
+    opp.editorialSignals.forEach(s => lines.push(`⚡ ${s}`))
+  }
+  lines.push('', sep, `Exportado em ${new Date().toLocaleString('pt-BR')} via Radar iMirante`)
+  return lines.join('\n')
+}
+
+function downloadTxt(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function PostDetails() {
   const { postId } = useParams<{ postId: string }>()
   const navigate = useNavigate()
+  const { account } = useAccount()
+  const mountedAccount = useRef(account)
+
+  // Se a conta mudar após o carregamento, voltar para o Radar da nova conta
+  useEffect(() => {
+    if (mountedAccount.current !== account) {
+      navigate('/radar', { replace: true })
+    }
+  }, [account, navigate])
 
   const [post, setPost] = useState<RadarPost | null>(null)
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null)
@@ -747,7 +821,15 @@ export default function PostDetails() {
   const [commentsLoading, setCommentsLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('analysis')
+  const [tab, setTab]     = useState<Tab>('analysis')
+  function handleExport() {
+    if (!post) return
+    const filename = `analise-${post.id}-${new Date().toISOString().slice(0, 10)}.txt`
+    downloadTxt(buildExportText(post, opportunity), filename)
+    toast.success(opportunity ? 'Análise exportada' : 'Post exportado', {
+      description: filename,
+    })
+  }
 
   useEffect(() => {
     if (!postId) return
@@ -810,14 +892,26 @@ export default function PostDetails() {
   return (
     <div className="space-y-4">
 
-      {/* Back */}
-      <Button
-        variant="ghost" size="sm"
-        onClick={() => navigate(-1)}
-        className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="w-4 h-4" /> Voltar ao Radar
-      </Button>
+      {/* Back + copy */}
+      <div className="flex items-center justify-between">
+        <Button
+          variant="ghost" size="sm"
+          onClick={() => navigate(-1)}
+          className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="w-4 h-4" /> Voltar ao Radar
+        </Button>
+
+        <Button
+          variant="outline" size="sm"
+          onClick={handleExport}
+          className="gap-1.5 h-8 text-xs"
+          title={opportunity ? 'Exportar post + análise como .txt' : 'Exportar dados do post como .txt'}
+        >
+          <Download className="w-3.5 h-3.5" />
+          {opportunity ? 'Exportar análise' : 'Exportar post'}
+        </Button>
+      </div>
 
       {/* 2-column layout */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">

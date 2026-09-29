@@ -5,6 +5,7 @@ import { AccountProvider } from '@/contexts/AccountContext'
 import { useAuth } from '@/hooks/useAuth'
 import AppLayout from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
+import { Toaster } from '@/components/ui/sonner'
 
 const Radar = lazy(() => import('@/pages/Radar'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
@@ -78,6 +79,7 @@ export default function App() {
       <AccountProvider>
         <BrowserRouter>
           <AppRoutes />
+          <Toaster />
         </BrowserRouter>
       </AccountProvider>
     </AuthProvider>

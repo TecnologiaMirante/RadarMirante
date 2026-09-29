@@ -7,6 +7,7 @@ import {
 import { signInWithGoogle, DomainNotAllowedError } from '@/services/auth'
 import { useAuth } from '@/hooks/useAuth'
 import { Logo } from '@/components/ui/Logo'
+import { toast } from 'sonner'
 
 function TikTokIcon() {
   return (
@@ -52,7 +53,10 @@ export default function Login() {
     setLoading(true)
     setErrorType(null)
     try {
-      await signInWithGoogle()
+      const u = await signInWithGoogle()
+      toast.success(`Bem-vindo, ${u.displayName?.split(' ')[0] ?? 'usuário'}!`, {
+        description: 'Login realizado com sucesso.',
+      })
     } catch (err) {
       if (err instanceof DomainNotAllowedError) {
         setErrorType('domain')

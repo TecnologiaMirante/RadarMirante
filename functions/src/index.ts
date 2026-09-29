@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin'
 import * as functions from 'firebase-functions/v1'
 import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { onDocumentCreated } from 'firebase-functions/v2/firestore'
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { defineSecret } from 'firebase-functions/params'
 import { monitorActivePosts } from './scheduled/monitorPosts'
 import { syncInstagramInsights } from './scheduled/syncInstagramInsights'
@@ -57,29 +57,149 @@ function getActiveAccounts(): AccountEntry[] {
   ]
 }
 
+// ─── Helpers de audit log ─────────────────────────────────────────────────────
+
+async function writeAuditLog(params: {
+  action: string
+  performedBy: string
+  performedByEmail: string
+  targetUid?: string
+  targetEmail?: string
+  details?: Record<string, unknown>
+}) {
+  try {
+    await db.collection('activityLog').add({
+      ...params,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+  } catch (err) {
+    console.warn('[audit]', err)
+  }
+}
+
 // ─── Auth: validação de domínio + criação do doc em /users ───────────────────
 
 export const onUserCreated = functions
   .region('southamerica-east1')
   .auth.user()
   .onCreate(async (user) => {
-    const email = user.email ?? ''
-    if (!email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)) {
-      console.warn('[onUserCreated] Domínio não autorizado:', email)
-      await admin.auth().deleteUser(user.uid)
+    const email = (user.email ?? '').toLowerCase()
+    const isAllowedDomain = email.endsWith(`@${ALLOWED_DOMAIN}`)
+
+    if (!isAllowedDomain) {
+      // Verifica se há convite pendente para este e-mail
+      const inviteSnap = await db.collection('invites')
+        .where('email', '==', email)
+        .where('status', '==', 'pending')
+        .limit(1)
+        .get()
+
+      if (inviteSnap.empty) {
+        console.warn('[onUserCreated] Domínio não autorizado e sem convite:', email)
+        await admin.auth().deleteUser(user.uid)
+        return
+      }
+
+      // Convite encontrado — usa as configs do convite
+      const invite = inviteSnap.docs[0]
+      const inviteData = invite.data()
+      await db.collection('users').doc(user.uid).set({
+        email: user.email,
+        displayName: user.displayName ?? '',
+        photoURL: user.photoURL ?? '',
+        role: inviteData.role ?? 'user',
+        isAdmin: inviteData.role === 'admin' || inviteData.role === 'superadmin',
+        accounts: inviteData.accounts ?? [],
+        invitedBy: inviteData.createdBy,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+      await invite.ref.update({
+        status: 'accepted',
+        acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+        acceptedBy: user.uid,
+      })
+      await writeAuditLog({
+        action: 'user_created',
+        performedBy: user.uid,
+        performedByEmail: email,
+        details: { via: 'invite', inviteId: invite.id },
+      })
       return
     }
+
     await db.collection('users').doc(user.uid).set({
       email: user.email,
       displayName: user.displayName ?? '',
       photoURL: user.photoURL ?? '',
       role: 'user',
       isAdmin: false,
-      accounts: ['imirante'],
+      accounts: [],
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     })
+    await writeAuditLog({
+      action: 'user_created',
+      performedBy: user.uid,
+      performedByEmail: email,
+    })
   })
+
+// ─── Sync disabled + audit log ao atualizar doc de usuário ───────────────────
+
+export const onUserDocUpdated = onDocumentUpdated(
+  { document: 'users/{userId}', region: 'southamerica-east1' },
+  async (event) => {
+    const before = event.data?.before.data()
+    const after  = event.data?.after.data()
+    if (!before || !after) return
+
+    const uid = event.params.userId
+    const changedByUid   = after.updatedBy ?? 'system'
+    const changedByEmail = after.updatedByEmail ?? 'system'
+    const targetEmail    = after.email ?? ''
+
+    // Sync disabled → Firebase Auth
+    if (before.disabled !== after.disabled) {
+      const isDisabled = after.disabled === true
+      await admin.auth().updateUser(uid, { disabled: isDisabled })
+      if (isDisabled) await admin.auth().revokeRefreshTokens(uid)
+      await writeAuditLog({
+        action: isDisabled ? 'user_disabled' : 'user_enabled',
+        performedBy: changedByUid,
+        performedByEmail: changedByEmail,
+        targetUid: uid,
+        targetEmail,
+      })
+    }
+
+    // Audit: role changed
+    if (before.role !== after.role) {
+      await writeAuditLog({
+        action: 'role_changed',
+        performedBy: changedByUid,
+        performedByEmail: changedByEmail,
+        targetUid: uid,
+        targetEmail,
+        details: { from: before.role, to: after.role },
+      })
+    }
+
+    // Audit: accounts changed
+    const beforeAccounts = JSON.stringify([...(before.accounts ?? [])].sort())
+    const afterAccounts  = JSON.stringify([...(after.accounts  ?? [])].sort())
+    if (beforeAccounts !== afterAccounts) {
+      await writeAuditLog({
+        action: 'accounts_changed',
+        performedBy: changedByUid,
+        performedByEmail: changedByEmail,
+        targetUid: uid,
+        targetEmail,
+        details: { from: before.accounts, to: after.accounts },
+      })
+    }
+  },
+)
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 
@@ -98,9 +218,26 @@ export const monitorPostsScheduled = onSchedule(
   { schedule: '0 6-20 * * *', timeZone: 'America/Sao_Paulo', retryCount: 2, region: 'southamerica-east1' },
   async () => {
     console.log('[monitorPostsScheduled] Iniciando ciclo')
+    const start = Date.now()
     try {
       await monitorActivePosts(db)
+      await db.collection('systemHealth').doc('monitorPosts').set({
+        lastRun: admin.firestore.FieldValue.serverTimestamp(),
+        lastStatus: 'success',
+        lastDurationMs: Date.now() - start,
+        consecutiveErrors: 0,
+        lastError: null,
+        runCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true })
     } catch (err) {
+      await db.collection('systemHealth').doc('monitorPosts').set({
+        lastRun: admin.firestore.FieldValue.serverTimestamp(),
+        lastStatus: 'error',
+        lastDurationMs: Date.now() - start,
+        lastError: err instanceof Error ? err.message : String(err),
+        consecutiveErrors: admin.firestore.FieldValue.increment(1),
+        runCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true })
       console.error('[monitorPostsScheduled] Erro:', err)
       throw err
     }
@@ -307,14 +444,27 @@ export const syncInsights = onSchedule(
   },
   async () => {
     console.log('[syncInsights] Iniciando')
+    const start = Date.now()
+    let hasError = false
+    let lastError: string | null = null
     for (const acc of getActiveAccounts()) {
       try {
         await syncInstagramInsights(db, acc.getToken(), acc.getAccountId(), acc.radarId)
         console.log(`[syncInsights] ${acc.radarId} OK`)
       } catch (err) {
+        hasError = true
+        lastError = err instanceof Error ? err.message : String(err)
         console.error(`[syncInsights] ${acc.radarId} erro:`, err)
       }
     }
+    await db.collection('systemHealth').doc('syncInsights').set({
+      lastRun: admin.firestore.FieldValue.serverTimestamp(),
+      lastStatus: hasError ? 'error' : 'success',
+      lastDurationMs: Date.now() - start,
+      lastError: lastError ?? null,
+      consecutiveErrors: hasError ? admin.firestore.FieldValue.increment(1) : 0,
+      runCount: admin.firestore.FieldValue.increment(1),
+    }, { merge: true })
   },
 )
 
@@ -333,14 +483,27 @@ export const collectInstagram = onSchedule(
   },
   async () => {
     console.log('[collectInstagram] Iniciando coleta')
+    const start = Date.now()
+    let hasError = false
+    let lastError: string | null = null
     for (const acc of getActiveAccounts()) {
       const connector = new InstagramConnector(acc.getToken(), acc.getAccountId(), db, acc.radarId)
       try {
         await connector.syncPosts()
         console.log(`[collectInstagram] ${acc.radarId}:`, connector.getLastCollectionResult())
       } catch (err) {
+        hasError = true
+        lastError = err instanceof Error ? err.message : String(err)
         console.error(`[collectInstagram] ${acc.radarId} erro:`, err)
       }
     }
+    await db.collection('systemHealth').doc('collectInstagram').set({
+      lastRun: admin.firestore.FieldValue.serverTimestamp(),
+      lastStatus: hasError ? 'error' : 'success',
+      lastDurationMs: Date.now() - start,
+      lastError: lastError ?? null,
+      consecutiveErrors: hasError ? admin.firestore.FieldValue.increment(1) : 0,
+      runCount: admin.firestore.FieldValue.increment(1),
+    }, { merge: true })
   },
 )

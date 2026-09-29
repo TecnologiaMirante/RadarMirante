@@ -1,10 +1,14 @@
 import { useState, useCallback } from 'react'
-import { User, RefreshCw, Shield, Crown, Lock, Check, Loader2 } from 'lucide-react'
+import { User, RefreshCw, Shield, Crown, Lock, Check, Loader2, UserX, UserCheck } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useTeamMembers } from '@/hooks/useTeamMembers'
 import { setUserRole, setUserAccounts } from '@/services/users'
+import { setUserDisabled } from '@/services/admin'
+import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccount } from '@/contexts/AccountContext'
+import { InvitePanel } from './InvitePanel'
+import { AuditLog } from './AuditLog'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types/user'
 
@@ -20,6 +24,7 @@ const ROLE_ACTIVE: Record<UserRole, string> = {
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type Tab = 'users' | 'invites' | 'activity'
 
 function UserCard({
   member,
@@ -32,10 +37,11 @@ function UserCard({
   canEdit: boolean
   availableAccounts: ReturnType<typeof useAccount>['accounts']
 }) {
-  const [role, setRoleState] = useState<UserRole>(member.role)
+  const [role, setRoleState]         = useState<UserRole>(member.role)
   const [accounts, setAccountsState] = useState<string[]>(member.accounts)
-  const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+  const [disabled, setDisabledState] = useState<boolean>(member.disabled ?? false)
+  const [saveState, setSaveState]    = useState<SaveState>('idle')
+  const [saveTimer, setSaveTimer]    = useState<ReturnType<typeof setTimeout> | null>(null)
 
   const isSuperAdminMember = member.role === 'superadmin'
   const initials = member.displayName
@@ -73,11 +79,26 @@ function UserCard({
     void autoSave(role, next)
   }
 
+  async function handleToggleDisabled() {
+    const next = !disabled
+    setSaveState('saving')
+    try {
+      await setUserDisabled(member.uid, next)
+      setDisabledState(next)
+      flashSaved()
+      toast.success(next ? `${member.displayName} desativado` : `${member.displayName} reativado`)
+    } catch {
+      setSaveState('error')
+      toast.error('Erro ao alterar status do usuário.')
+    }
+  }
+
   const isAdminOrAbove = role === 'admin' || role === 'superadmin'
 
   return (
     <div className={cn(
       'rounded-xl border bg-card p-4 space-y-4 transition-all',
+      disabled ? 'opacity-60 border-border/40' :
       isSelf ? 'border-primary/20 bg-primary/5' : 'border-border/70',
     )}>
       {/* Header */}
@@ -99,23 +120,46 @@ function UserCard({
                   você
                 </span>
               )}
+              {disabled && (
+                <span className="text-[9px] font-semibold text-destructive bg-destructive/10 rounded px-1.5 py-0.5 leading-none">
+                  desativado
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-muted-foreground truncate">{member.email}</p>
           </div>
         </div>
 
-        {/* Save state indicator */}
-        <div className="flex-shrink-0 h-5 flex items-center">
-          {saveState === 'saving' && (
-            <Loader2 className="w-3.5 h-3.5 text-muted-foreground/50 animate-spin" />
-          )}
-          {saveState === 'saved' && (
-            <span className="flex items-center gap-1 text-[10px] text-green-500 font-medium">
-              <Check className="w-3 h-3" /> Salvo
-            </span>
-          )}
-          {saveState === 'error' && (
-            <span className="text-[10px] text-destructive font-medium">Erro ao salvar</span>
+        {/* Save state + disable toggle */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="h-5 flex items-center">
+            {saveState === 'saving' && (
+              <Loader2 className="w-3.5 h-3.5 text-muted-foreground/50 animate-spin" />
+            )}
+            {saveState === 'saved' && (
+              <span className="flex items-center gap-1 text-[10px] text-green-500 font-medium">
+                <Check className="w-3 h-3" /> Salvo
+              </span>
+            )}
+            {saveState === 'error' && (
+              <span className="text-[10px] text-destructive font-medium">Erro</span>
+            )}
+          </div>
+
+          {canEdit && !isSelf && !isSuperAdminMember && (
+            <button
+              onClick={() => void handleToggleDisabled()}
+              disabled={saveState === 'saving'}
+              title={disabled ? 'Reativar usuário' : 'Desativar usuário'}
+              className={cn(
+                'w-7 h-7 rounded-md flex items-center justify-center transition-colors border disabled:opacity-50',
+                disabled
+                  ? 'text-green-500 border-green-500/30 hover:bg-green-500/10'
+                  : 'text-muted-foreground/50 border-border hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10',
+              )}
+            >
+              {disabled ? <UserCheck className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
+            </button>
           )}
         </div>
       </div>
@@ -215,10 +259,17 @@ function UserCard({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'users',    label: 'Usuários'   },
+  { value: 'invites',  label: 'Convites'   },
+  { value: 'activity', label: 'Atividades' },
+]
+
 export function AdminPanel() {
   const { user, role: currentRole } = useAuth()
   const { members, loading, retry } = useTeamMembers()
   const { accounts: availableAccounts } = useAccount()
+  const [tab, setTab] = useState<Tab>('users')
 
   const isSuperAdmin = currentRole === 'superadmin'
 
@@ -228,53 +279,80 @@ export function AdminPanel() {
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
           Gerenciar Usuários e Acessos
         </p>
-        <button
-          onClick={retry}
-          disabled={loading}
-          className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
-        >
-          <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
-          Atualizar
-        </button>
+        {tab === 'users' && (
+          <button
+            onClick={retry}
+            disabled={loading}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
+            Atualizar
+          </button>
+        )}
       </div>
 
-      {!isSuperAdmin && (
-        <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5 flex items-center gap-2">
-          <Lock className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            Somente Super Admins podem editar papéis e acessos.
-          </p>
-        </div>
+      {/* Tabs */}
+      <div className="flex border-b border-border">
+        {TABS.map(t => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={cn(
+              'px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
+              tab === t.value
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'users' && (
+        <>
+          {!isSuperAdmin && (
+            <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5 flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                Somente Super Admins podem editar papéis, acessos e desativar usuários.
+              </p>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-40 rounded-xl bg-card border border-border/60 animate-pulse"
+                  style={{ animationDelay: `${i * 60}ms` }} />
+              ))}
+            </div>
+          ) : members.length === 0 ? (
+            <div className="py-12 text-center space-y-2">
+              <p className="text-sm text-muted-foreground">Nenhum usuário encontrado.</p>
+              <button onClick={retry}
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+                <RefreshCw className="w-3 h-3" /> Tentar novamente
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {members.map(m => (
+                <UserCard
+                  key={m.uid}
+                  member={m}
+                  isSelf={m.uid === user?.uid}
+                  canEdit={isSuperAdmin}
+                  availableAccounts={availableAccounts}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-40 rounded-xl bg-card border border-border/60 animate-pulse"
-              style={{ animationDelay: `${i * 60}ms` }} />
-          ))}
-        </div>
-      ) : members.length === 0 ? (
-        <div className="py-12 text-center space-y-2">
-          <p className="text-sm text-muted-foreground">Nenhum usuário encontrado.</p>
-          <button onClick={retry}
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
-            <RefreshCw className="w-3 h-3" /> Tentar novamente
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {members.map(m => (
-            <UserCard
-              key={m.uid}
-              member={m}
-              isSelf={m.uid === user?.uid}
-              canEdit={isSuperAdmin}
-              availableAccounts={availableAccounts}
-            />
-          ))}
-        </div>
-      )}
+      {tab === 'invites' && <InvitePanel />}
+      {tab === 'activity' && <AuditLog />}
     </div>
   )
 }

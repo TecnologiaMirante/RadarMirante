@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       else if (data.role === 'admin') r = 'admin'
       else if (data.isAdmin === true) r = 'admin'
       setRole(r)
-      setUserAccounts(Array.isArray(data.accounts) ? (data.accounts as string[]) : ['imirante'])
+      setUserAccounts(Array.isArray(data.accounts) ? (data.accounts as string[]) : [])
     })
     return unsub
   }, [user])

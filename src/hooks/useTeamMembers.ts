@@ -11,6 +11,7 @@ export interface TeamMember {
   isAdmin: boolean
   role: UserRole
   accounts: string[]
+  disabled?: boolean
 }
 
 export function useTeamMembers() {
@@ -37,6 +38,7 @@ export function useTeamMembers() {
           isAdmin,
           role,
           accounts: Array.isArray(raw.accounts) ? (raw.accounts as string[]) : ['imirante'],
+          disabled: raw.disabled === true,
         }
       }) as TeamMember[]
       setMembers(data.sort((a, b) => a.displayName.localeCompare(b.displayName)))

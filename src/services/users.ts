@@ -1,5 +1,5 @@
-import { doc, updateDoc } from 'firebase/firestore'
-import { db } from './firebase'
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { db, auth } from './firebase'
 import type { UserRole } from '@/types/user'
 
 export async function setUserAdmin(uid: string, isAdmin: boolean): Promise<void> {
@@ -7,13 +7,22 @@ export async function setUserAdmin(uid: string, isAdmin: boolean): Promise<void>
 }
 
 export async function setUserRole(uid: string, role: UserRole): Promise<void> {
+  const user = auth.currentUser
   await updateDoc(doc(db, 'users', uid), {
     role,
     isAdmin: role !== 'user',
-    updatedAt: new Date(),
+    updatedBy: user?.uid ?? 'client',
+    updatedByEmail: user?.email ?? '',
+    updatedAt: serverTimestamp(),
   })
 }
 
 export async function setUserAccounts(uid: string, accounts: string[]): Promise<void> {
-  await updateDoc(doc(db, 'users', uid), { accounts, updatedAt: new Date() })
+  const user = auth.currentUser
+  await updateDoc(doc(db, 'users', uid), {
+    accounts,
+    updatedBy: user?.uid ?? 'client',
+    updatedByEmail: user?.email ?? '',
+    updatedAt: serverTimestamp(),
+  })
 }

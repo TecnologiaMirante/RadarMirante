@@ -1,14 +1,16 @@
+import { useState } from 'react'
 import { Settings as SettingsIcon, LogOut, User } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { auth } from '@/services/firebase'
-import { signOut } from 'firebase/auth'
 import { useAuth } from '@/hooks/useAuth'
 import { CredentialVault } from '@/components/credentials/CredentialVault'
 import { AdminPanel } from '@/components/admin/AdminPanel'
+import { SystemHealth } from '@/components/admin/SystemHealth'
+import { LogoutDialog } from '@/components/layout/LogoutDialog'
 
 export default function Settings() {
   const { user, isAdmin, role } = useAuth()
+  const [logoutOpen, setLogoutOpen] = useState(false)
 
   return (
     <div className="space-y-6">
@@ -49,8 +51,8 @@ export default function Settings() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="gap-1.5 text-muted-foreground hover:text-foreground"
-                onClick={() => void signOut(auth)}
+                className="gap-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setLogoutOpen(true)}
               >
                 <LogOut className="w-3.5 h-3.5" />
                 Sair
@@ -64,7 +66,12 @@ export default function Settings() {
       {isAdmin && <AdminPanel />}
 
       {/* Cofre de acessos */}
-      <CredentialVault isAdmin={isAdmin} />
+      <CredentialVault />
+
+      {/* Saúde do sistema — só admins */}
+      {isAdmin && <SystemHealth />}
+
+      <LogoutDialog open={logoutOpen} onClose={() => setLogoutOpen(false)} />
     </div>
   )
 }

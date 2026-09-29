@@ -14,6 +14,7 @@ import {
   TikTokIcon, GoogleIcon, WordPressIcon, OtherIcon,
 } from '@/components/ui/platform-icons'
 import { createCredential, updateCredential } from '@/services/credentials'
+import { toast } from 'sonner'
 import { useTeamMembers } from '@/hooks/useTeamMembers'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
@@ -55,7 +56,6 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
   const [email, setEmail]                       = useState('')
   const [password, setPassword]                 = useState('')
   const [notes, setNotes]                       = useState('')
-  const [visibleToAll, setVisibleToAll]         = useState(true)
   const [selectedUids, setSelectedUids]         = useState<Set<string>>(new Set())
   const [memberSearch, setMemberSearch]         = useState('')
   const [showPass, setShowPass]                 = useState(false)
@@ -73,9 +73,7 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
       setEmail(editing.email ?? '')
       setPassword(editing.password ?? '')
       setNotes(editing.notes ?? '')
-      const isAll = editing.visibleTo === 'all'
-      setVisibleToAll(isAll)
-      if (isAll) {
+      if (editing.visibleTo === 'all') {
         setSelectedUids(new Set(currentUid ? [currentUid] : []))
       } else {
         const uids = new Set(editing.visibleTo as string[])
@@ -86,7 +84,6 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
       setName(''); setPlatform('instagram'); setPlatformCustomName('')
       setLoginType('email_password')
       setUsername(''); setEmail(''); setPassword(''); setNotes('')
-      setVisibleToAll(true)
       setSelectedUids(new Set(currentUid ? [currentUid] : []))
     }
     setMemberSearch(''); setError(''); setShowPass(false)
@@ -117,7 +114,7 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
     if (loginType !== 'other' && email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError('E-mail inválido.'); return
     }
-    if (!visibleToAll && selectedUids.size === 0) {
+    if (selectedUids.size === 0) {
       setError('Selecione pelo menos uma pessoa.'); return
     }
     setError('')
@@ -133,17 +130,20 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
         email: email.trim() || undefined,
         password: password || undefined,
         notes: notes.trim() || undefined,
-        visibleTo: (visibleToAll ? 'all' : [...selectedUids]) as 'all' | string[],
+        visibleTo: [...selectedUids] as string[],
       }
       if (editing) {
         await updateCredential(editing.id, payload)
+        toast.success('Credencial atualizada')
       } else {
         await createCredential(payload)
+        toast.success('Credencial adicionada')
       }
       onSaved()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar.')
+      toast.error('Erro ao salvar credencial.')
     } finally {
       setSaving(false)
     }
@@ -277,25 +277,7 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
           <div className="space-y-3">
             <p className="text-xs font-bold text-foreground/80 uppercase tracking-wider">Visibilidade</p>
 
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: true,  label: '🌐  Toda a equipe' },
-                { value: false, label: '👥  Específicos' },
-              ].map(({ value, label }) => (
-                <button key={String(value)} type="button" onClick={() => setVisibleToAll(value)}
-                  className={cn(
-                    'py-2.5 rounded-lg border text-xs font-medium transition-all duration-150',
-                    visibleToAll === value
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'border-border text-muted-foreground hover:bg-accent',
-                  )}>
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {!visibleToAll && (
-              <div className="rounded-xl border border-border overflow-hidden bg-background">
+            <div className="rounded-xl border border-border overflow-hidden bg-background">
                 {/* Search */}
                 <div className="px-3 py-2 border-b border-border bg-muted/30">
                   <div className="relative">
@@ -388,8 +370,7 @@ export function CredentialForm({ open, onClose, onSaved, editing }: Props) {
                     </p>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </div>
 
           {error && (

@@ -16,15 +16,13 @@ export async function getCredentials(): Promise<Credential[]> {
   const uid = auth.currentUser?.uid
   if (!uid) return []
 
-  // Dois queries: visíveis para todos + visíveis para este UID
-  const [allSnap, userSnap] = await Promise.all([
-    getDocs(query(collection(db, 'credentials'), where('visibleTo', '==', 'all'))),
-    getDocs(query(collection(db, 'credentials'), where('visibleTo', 'array-contains', uid))),
-  ])
+  const userSnap = await getDocs(
+    query(collection(db, 'credentials'), where('visibleTo', 'array-contains', uid)),
+  )
 
   const map = new Map<string, Credential>()
-  for (const d of [...allSnap.docs, ...userSnap.docs]) {
-    if (!map.has(d.id)) map.set(d.id, { id: d.id, ...d.data() } as Credential)
+  for (const d of userSnap.docs) {
+    map.set(d.id, { id: d.id, ...d.data() } as Credential)
   }
 
   return [...map.values()].sort((a, b) => {

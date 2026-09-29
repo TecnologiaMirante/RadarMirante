@@ -60,8 +60,9 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(getCollapsed)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const { account, setAccount, accounts, getAccount } = useAccount()
+  const hasAccounts = accounts.length > 0
   const currentConfig = getAccount(account)
-  const color = currentConfig?.color ?? '#38B6FF'
+  const color = hasAccounts ? (currentConfig?.color ?? '#38B6FF') : '#6b7280'
 
   function toggle() {
     setCollapsed(v => {
@@ -93,54 +94,78 @@ export function Sidebar() {
       {/* ── Account Switcher ─────────────────────────────────────── */}
       <div className="border-b border-border/50">
         <button
-          onClick={() => !collapsed && setSwitcherOpen(v => !v)}
+          onClick={() => !collapsed && hasAccounts && setSwitcherOpen(v => !v)}
+          disabled={!hasAccounts}
           className={cn(
-            'w-full flex items-center transition-colors duration-150',
+            'w-full flex items-center transition-colors duration-150 disabled:cursor-default',
             collapsed ? 'h-[60px] justify-center' : 'gap-3 px-3 py-3',
-            !collapsed && 'hover:bg-accent/30',
+            !collapsed && hasAccounts && 'hover:bg-accent/30',
             !collapsed && switcherOpen && 'bg-accent/20',
           )}
         >
-          {/* Logo */}
+          {/* Logo / Sem acesso */}
           <div className="relative flex-shrink-0">
-            <AccountLogo id={account} size={9} />
-            {!ACCOUNT_LOGOS[account] && (
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                style={{ backgroundColor: color }}
-              >
-                {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
+            {hasAccounts ? (
+              <>
+                <AccountLogo id={account} size={9} />
+                {!ACCOUNT_LOGOS[account] && (
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                    style={{ backgroundColor: color }}
+                  >
+                    {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-muted/60 border border-border/60 flex-shrink-0">
+                <Radio className="w-4 h-4 text-muted-foreground/40" />
               </div>
             )}
             {/* Status dot */}
             <span
               className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card"
-              style={{ backgroundColor: color }}
+              style={{ backgroundColor: hasAccounts ? color : '#6b728040' }}
             />
           </div>
 
           {!collapsed && (
             <>
               <div className="min-w-0 flex-1 text-left">
-                <p className="text-sm font-semibold text-foreground truncate leading-tight">
-                  {currentConfig?.displayName ?? account}
-                </p>
-                <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
-                  @{account}
-                </p>
-              </div>
-              <ChevronDown
-                className={cn(
-                  'w-4 h-4 text-muted-foreground/50 flex-shrink-0 transition-transform duration-200',
-                  switcherOpen && 'rotate-180',
+                {hasAccounts ? (
+                  <>
+                    <p className="text-sm font-semibold text-foreground truncate leading-tight">
+                      {currentConfig?.displayName ?? account}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+                      @{account}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground/50 truncate leading-tight">
+                      Sem acesso
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/30 truncate leading-tight mt-0.5">
+                      nenhuma conta
+                    </p>
+                  </>
                 )}
-              />
+              </div>
+              {hasAccounts && (
+                <ChevronDown
+                  className={cn(
+                    'w-4 h-4 text-muted-foreground/50 flex-shrink-0 transition-transform duration-200',
+                    switcherOpen && 'rotate-180',
+                  )}
+                />
+              )}
             </>
           )}
         </button>
 
         {/* Account dropdown */}
-        {!collapsed && (
+        {!collapsed && hasAccounts && (
           <div className={cn(
             'grid transition-[grid-template-rows] duration-200 ease-in-out',
             switcherOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',

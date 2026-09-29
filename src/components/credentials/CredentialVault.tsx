@@ -5,12 +5,11 @@ import { CredentialCard } from './CredentialCard'
 import { CredentialForm } from './CredentialForm'
 import { getCredentials, deleteCredential } from '@/services/credentials'
 import type { Credential } from '@/types/credentials'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
 
-interface Props {
-  isAdmin: boolean
-}
-
-export function CredentialVault({ isAdmin }: Props) {
+export function CredentialVault() {
+  const { user, isAdmin } = useAuth()
   const [credentials, setCredentials] = useState<Credential[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -43,10 +42,12 @@ export function CredentialVault({ isAdmin }: Props) {
     setDeleting(true)
     try {
       await deleteCredential(confirmDelete.id)
+      toast.success(`"${confirmDelete.name}" removido`)
       setConfirmDelete(null)
       await load()
     } catch (err) {
       console.error('[CredentialVault] delete', err)
+      toast.error('Erro ao remover credencial.')
     } finally {
       setDeleting(false)
     }
@@ -59,12 +60,10 @@ export function CredentialVault({ isAdmin }: Props) {
           <KeyRound className="w-3.5 h-3.5 text-muted-foreground/70" />
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Cofre de Acessos</p>
         </div>
-        {isAdmin && (
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={openAdd}>
-            <Plus className="w-3.5 h-3.5" />
-            Adicionar
-          </Button>
-        )}
+        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={openAdd}>
+          <Plus className="w-3.5 h-3.5" />
+          Adicionar
+        </Button>
       </div>
 
       {loading ? (
@@ -89,11 +88,9 @@ export function CredentialVault({ isAdmin }: Props) {
         <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center">
           <KeyRound className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground/50">Nenhum acesso cadastrado</p>
-          {isAdmin && (
-            <p className="text-xs text-muted-foreground/40 mt-1">
-              Clique em "Adicionar" para cadastrar o primeiro acesso.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground/40 mt-1">
+            Clique em "Adicionar" para cadastrar o primeiro acesso.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -101,7 +98,7 @@ export function CredentialVault({ isAdmin }: Props) {
             <CredentialCard
               key={c.id}
               credential={c}
-              isAdmin={isAdmin}
+              canManage={isAdmin || c.createdBy === user?.uid}
               onEdit={openEdit}
               onDelete={setConfirmDelete}
             />

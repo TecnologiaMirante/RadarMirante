@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   LogOut, Sun, Moon, Radio, LayoutDashboard, Sparkles, Instagram, Settings,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { signOut } from '@/services/auth'
 import { useTheme } from '@/hooks/useTheme'
+import { LogoutDialog } from './LogoutDialog'
 import { useAccount } from '@/contexts/AccountContext'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -38,10 +39,13 @@ export function Header() {
   const { theme, toggle } = useTheme()
   const { getAccount, account } = useAccount()
   const location = useLocation()
+  const [logoutOpen, setLogoutOpen] = useState(false)
 
+  const { accounts } = useAccount()
+  const hasAccounts = accounts.length > 0
   const currentConfig = getAccount(account)
-  const color = currentConfig?.color ?? '#38B6FF'
-  const logo = ACCOUNT_LOGOS[account]
+  const color = hasAccounts ? (currentConfig?.color ?? '#38B6FF') : '#6b7280'
+  const logo = hasAccounts ? ACCOUNT_LOGOS[account] : undefined
 
   const page = PAGE_MAP[location.pathname] ?? PAGE_MAP['/radar']
   const PageIcon = page.icon
@@ -52,10 +56,6 @@ export function Header() {
     .map(n => n[0])
     .join('')
     .toUpperCase()
-
-  async function handleSignOut() {
-    await signOut()
-  }
 
   return (
     <header className="h-14 flex items-center justify-between px-5 border-b border-border/60 bg-card flex-shrink-0">
@@ -80,25 +80,27 @@ export function Header() {
       {/* ── Right: actions ───────────────────────────────────────── */}
       <div className="flex items-center gap-1">
 
-        {/* Account badge */}
-        <div
-          className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full mr-2"
-          style={{
-            backgroundColor: color + '12',
-            border: `1px solid ${color}28`,
-          }}
-        >
-          {logo ? (
-            <div className="w-4 h-4 rounded-sm bg-white overflow-hidden flex-shrink-0">
-              <img src={logo} alt={account} className="w-full h-full object-contain" />
-            </div>
-          ) : (
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-          )}
-          <span className="text-[11px] font-medium text-foreground/80 select-none">
-            {currentConfig?.displayName ?? account}
-          </span>
-        </div>
+        {/* Account badge — hidden when no accounts */}
+        {hasAccounts && (
+          <div
+            className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full mr-2"
+            style={{
+              backgroundColor: color + '12',
+              border: `1px solid ${color}28`,
+            }}
+          >
+            {logo ? (
+              <div className="w-4 h-4 rounded-sm bg-white overflow-hidden flex-shrink-0">
+                <img src={logo} alt={account} className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            )}
+            <span className="text-[11px] font-medium text-foreground/80 select-none">
+              {currentConfig?.displayName ?? account}
+            </span>
+          </div>
+        )}
 
         {/* Theme toggle */}
         <button
@@ -139,7 +141,7 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={handleSignOut}
+              onClick={() => setLogoutOpen(true)}
               className="text-destructive focus:text-destructive cursor-pointer"
             >
               <LogOut className="mr-2 h-3.5 w-3.5" />
@@ -148,6 +150,8 @@ export function Header() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <LogoutDialog open={logoutOpen} onClose={() => setLogoutOpen(false)} />
     </header>
   )
 }

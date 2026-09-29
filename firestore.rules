@@ -39,11 +39,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isMiranteUser();
 
-      // Superadmins can change role, isAdmin, and accounts on other users
+      // Superadmins can change role, isAdmin, accounts, and disabled on other users
       allow update: if isSuperAdmin() &&
         userId != request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['role', 'isAdmin', 'accounts', 'updatedAt']);
+          .hasOnly(['role', 'isAdmin', 'accounts', 'disabled', 'updatedBy', 'updatedByEmail', 'updatedAt']);
 
       // Legacy: any admin can toggle isAdmin on other users
       allow update: if isCurrentUserAdmin() &&
@@ -145,11 +145,15 @@ service cloud.firestore {
         )
       }
       allow read: if canReadCredential()
-      allow create: if isCurrentUserAdmin() &&
+      allow create: if isMiranteUser() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.keys().hasAll(['name', 'platform', 'loginType', 'visibleTo', 'createdBy', 'createdAt', 'updatedAt'])
-      allow update: if isCurrentUserAdmin()
-      allow delete: if isCurrentUserAdmin()
+      allow update: if isMiranteUser() && (
+        resource.data.createdBy == request.auth.uid || isCurrentUserAdmin()
+      )
+      allow delete: if isMiranteUser() && (
+        resource.data.createdBy == request.auth.uid || isCurrentUserAdmin()
+      )
     }
 
     // ─── Instagram Insights ───────────────────────────────────────────────────
@@ -187,6 +191,36 @@ service cloud.firestore {
     match /instagramAudience/{docId} {
       allow read: if isMiranteUser();
       allow write: if false;
+    }
+
+    // ─── Invites ──────────────────────────────────────────────────────────────
+
+    match /invites/{inviteId} {
+      allow read: if isCurrentUserAdmin();
+      allow create: if isCurrentUserAdmin() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.keys().hasAll(['email', 'role', 'accounts', 'createdBy', 'createdByEmail', 'createdAt', 'status']);
+      allow update: if isCurrentUserAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'acceptedAt', 'acceptedBy']);
+      allow delete: if isCurrentUserAdmin() && resource.data.status == 'pending';
+    }
+
+    // ─── System Health ────────────────────────────────────────────────────────
+
+    match /systemHealth/{docId} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
+    // ─── Activity Log ─────────────────────────────────────────────────────────
+
+    match /activityLog/{logId} {
+      allow read: if isCurrentUserAdmin();
+      allow create: if isMiranteUser() &&
+        request.resource.data.performedBy == request.auth.uid &&
+        request.resource.data.keys().hasAll(['action', 'performedBy', 'performedByEmail', 'createdAt']);
+      allow update, delete: if false;
     }
 
     // ─── Editorial Feedback ───────────────────────────────────────────────────
