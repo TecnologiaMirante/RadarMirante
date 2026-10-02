@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Radio, RefreshCw, MessageCircle, LayoutGrid, List,
   TrendingUp, FileText, Activity, Search, X,
-  Heart, Eye, Zap, Award, Clock, ArrowUpRight, Maximize2,
+  Heart, Eye, Zap, Award, Clock, ArrowUpRight, Maximize2, CalendarClock,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -164,9 +164,13 @@ function StatRow({ icon, label, value, accent }: {
 
 export default function Radar() {
   const { posts, filters, setFilters, loading, error, refresh } = useRadar()
-  const { account } = useAccount()
+  const { account, getAccount } = useAccount()
   const accountColor = ACCOUNT_COLORS[account]
   const pageTitle = ACCOUNT_PAGE_TITLES[account]
+  const accountConfig = getAccount(account)
+  const collectingSince = accountConfig?.collectingSince
+    ? new Date(accountConfig.collectingSince + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : undefined
   const [cloudPeriod, setCloudPeriod] = useState(CLOUD_PERIODS[4].value)
   const [cloudTexts, setCloudTexts] = useState<string[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
@@ -191,11 +195,11 @@ export default function Radar() {
 
   useEffect(() => {
     setCloudLoading(true)
-    getRecentCommentTexts(Date.now() - cloudPeriod)
+    getRecentCommentTexts(Date.now() - cloudPeriod, undefined, account)
       .then(setCloudTexts)
       .catch(console.error)
       .finally(() => setCloudLoading(false))
-  }, [cloudPeriod])
+  }, [cloudPeriod, account])
 
   const overrideAllLabel = useMemo(() => {
     if (posts.length === 0) return undefined
@@ -411,6 +415,24 @@ export default function Radar() {
                 </span>
               )}
             </p>
+            {collectingSince && (
+              <div className="flex items-center gap-1 mt-1">
+                <CalendarClock className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+                <span className="text-[10px] text-muted-foreground/50">
+                  Monitorando desde {collectingSince}
+                </span>
+                <InfoTip side="bottom">
+                  <p className="font-semibold text-foreground mb-1.5">Início da coleta</p>
+                  <p className="text-muted-foreground mb-1.5">
+                    O Radar começou a monitorar essa conta em <strong className="text-foreground">{collectingSince}</strong>.
+                  </p>
+                  <p className="text-muted-foreground">
+                    Posts mais antigos podem aparecer com a data original de publicação,
+                    mas <strong className="text-foreground">sem histórico de snapshots de engajamento</strong> (curvas de crescimento, score, etc.) — esse dado só existe a partir do início da coleta.
+                  </p>
+                </InfoTip>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

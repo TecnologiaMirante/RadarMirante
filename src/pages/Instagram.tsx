@@ -1,13 +1,4 @@
 import { useState, useEffect, useMemo } from 'react'
-import imiranteLogo from '@/assets/imirante_logo.png'
-import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
-import tvmiranteLogo from '@/assets/tvmirante_logo.png'
-
-const ACCOUNT_LOGOS: Record<string, string | undefined> = {
-  imirante: imiranteLogo,
-  imiranteesporte: imiranteEsporteLogo,
-  tvmirante: tvmiranteLogo,
-}
 import {
   ComposedChart, LineChart, BarChart,
   Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -344,11 +335,11 @@ export default function InstagramPage() {
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          {ACCOUNT_LOGOS[account] ? (
+          {profile?.profilePictureUrl ? (
             <img
-              src={ACCOUNT_LOGOS[account]}
-              alt={account}
-              className="w-12 h-12 rounded-full object-contain bg-card border border-border/60 flex-shrink-0"
+              src={profile.profilePictureUrl}
+              alt={profile.username}
+              className="w-12 h-12 rounded-full object-cover border border-border/60 flex-shrink-0"
             />
           ) : (
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 via-purple-500 to-orange-400 flex items-center justify-center flex-shrink-0">

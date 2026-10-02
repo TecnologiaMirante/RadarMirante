@@ -11,15 +11,6 @@ import {
 import type { InstagramDailyInsight, InstagramAccountProfile, InstagramOnlineFollowers } from '@/types/instagram'
 import { cn } from '@/lib/utils'
 import { useAccount } from '@/contexts/AccountContext'
-import imiranteLogo from '@/assets/imirante_logo.png'
-import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
-import tvmiranteLogo from '@/assets/tvmirante_logo.png'
-
-const ACCOUNT_LOGOS: Record<string, string> = {
-  imirante: imiranteLogo,
-  imiranteesporte: imiranteEsporteLogo,
-  tvmirante: tvmiranteLogo,
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -225,11 +216,11 @@ export function InstagramInsightsPanel() {
       {/* Perfil */}
       {profile && (
         <div className="flex items-center gap-2.5">
-          {ACCOUNT_LOGOS[account] ? (
+          {profile.profilePictureUrl ? (
             <img
-              src={ACCOUNT_LOGOS[account]}
-              alt={account}
-              className="w-9 h-9 rounded-full object-contain bg-card border border-border/60 flex-shrink-0"
+              src={profile.profilePictureUrl}
+              alt={profile.username}
+              className="w-9 h-9 rounded-full object-cover border border-border/60 flex-shrink-0"
             />
           ) : (
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 via-purple-400 to-orange-400 flex items-center justify-center flex-shrink-0">

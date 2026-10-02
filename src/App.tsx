@@ -65,7 +65,7 @@ function AppRoutes() {
         <Route path="radar/:opportunityId" element={<Suspense fallback={<LoadingScreen />}><OpportunityDetails /></Suspense>} />
         <Route path="dashboard" element={<Suspense fallback={<LoadingScreen />}><Dashboard /></Suspense>} />
         <Route path="analises" element={<Suspense fallback={<LoadingScreen />}><AnalysesPage /></Suspense>} />
-        <Route path="instagram" element={<Suspense fallback={<LoadingScreen />}><InstagramPage /></Suspense>} />
+        <Route path="insights" element={<Suspense fallback={<LoadingScreen />}><InstagramPage /></Suspense>} />
         <Route path="settings" element={<Suspense fallback={<LoadingScreen />}><Settings /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/radar" replace />} />

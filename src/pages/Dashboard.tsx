@@ -146,7 +146,7 @@ export default function Dashboard() {
     setLoading(true)
     getPosts({ platform: 'all', time: 'all', sort: 'recent' }, account)
       .then(data => setAllPosts(data))
-      .catch(err => console.error('[Dashboard]', err))
+      .catch(err => console.error('[Insights]', err))
       .finally(() => setLoading(false))
   }, [account])
 
@@ -172,11 +172,11 @@ export default function Dashboard() {
     setCloudLoading(true)
     const cutoff = TIME_MS[displayTime] ?? null
     const sinceMs = cutoff !== null ? Date.now() - cutoff : Date.now() - 7 * 24 * 60 * 60 * 1000
-    getRecentCommentTexts(sinceMs)
+    getRecentCommentTexts(sinceMs, undefined, account)
       .then(setCommentTexts)
       .catch(console.error)
       .finally(() => setCloudLoading(false))
-  }, [displayTime])
+  }, [displayTime, account])
 
   const trendingPosts  = useMemo(() => posts.filter(p => p.status === 'trending'),   [posts])
   const candidatePosts = useMemo(() => posts.filter(p => p.status === 'candidate'),  [posts])

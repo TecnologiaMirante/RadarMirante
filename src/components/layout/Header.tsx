@@ -19,18 +19,20 @@ import {
 import imiranteLogo from '@/assets/imirante_logo.png'
 import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 import tvmiranteLogo from '@/assets/tvmirante_logo.png'
+import imirantepoliticaLogo from '@/assets/imirantepolitica_logo.png'
 
 const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
   imiranteesporte: imiranteEsporteLogo,
   tvmirante: tvmiranteLogo,
+  imirantepolitica: imirantepoliticaLogo,
 }
 
 const PAGE_MAP: Record<string, { label: string; icon: React.FC<React.SVGProps<SVGSVGElement>>; desc: string }> = {
   '/radar':     { label: 'Radar',          icon: Radio,           desc: 'Feed de engajamento em tempo real' },
-  '/dashboard': { label: 'Dashboard',      icon: LayoutDashboard, desc: 'Visão geral das métricas' },
+  '/dashboard': { label: 'Dashboard',       icon: LayoutDashboard, desc: 'Visão geral das métricas' },
   '/analises':  { label: 'Análises',       icon: Sparkles,        desc: 'Pautas e insights gerados pela IA' },
-  '/instagram': { label: 'Instagram',      icon: Instagram,       desc: 'Métricas de perfil e audiência' },
+  '/insights':  { label: 'Insights',        icon: Instagram,       desc: 'Métricas de perfil e audiência' },
   '/settings':  { label: 'Configurações',  icon: Settings,        desc: 'Conta e preferências do sistema' },
 }
 

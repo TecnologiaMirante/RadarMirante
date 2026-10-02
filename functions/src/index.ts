@@ -27,10 +27,12 @@ const openaiApiKey = defineSecret('OPENAI_API_KEY')
 // Cada conta tem seu próprio par de token + account ID no Secret Manager.
 // Para adicionar uma nova conta: crie os secrets no Secret Manager, declare
 // com defineSecret() aqui e adicione uma entrada em getActiveAccounts().
-const instagramToken       = defineSecret('INSTAGRAM_ACCESS_TOKEN')
-const instagramAccountId   = defineSecret('INSTAGRAM_ACCOUNT_ID')
-const tvmiranteToken       = defineSecret('TVMIRANTE_INSTAGRAM_ACCESS_TOKEN')
-const tvmiranteAccountId   = defineSecret('TVMIRANTE_INSTAGRAM_ACCOUNT_ID')
+const instagramToken            = defineSecret('INSTAGRAM_ACCESS_TOKEN')
+const instagramAccountId        = defineSecret('INSTAGRAM_ACCOUNT_ID')
+const tvmiranteToken            = defineSecret('TVMIRANTE_INSTAGRAM_ACCESS_TOKEN')
+const tvmiranteAccountId        = defineSecret('TVMIRANTE_INSTAGRAM_ACCOUNT_ID')
+const imirantepoliticaToken     = defineSecret('instagram-token-imirantepolitica')
+const imirantepoliticaAccountId = defineSecret('instagram-account-id-imirantepolitica')
 
 interface AccountEntry {
   radarId: string
@@ -53,7 +55,12 @@ function getActiveAccounts(): AccountEntry[] {
       getToken: () => tvmiranteToken.value(),
       getAccountId: () => tvmiranteAccountId.value(),
     },
-    // imiranteesporte: adicionar aqui quando secrets estiverem no Secret Manager
+    {
+      radarId: 'imirantepolitica',
+      profile: 'editorial' as AccountProfile,
+      getToken: () => imirantepoliticaToken.value(),
+      getAccountId: () => imirantepoliticaAccountId.value(),
+    },
   ]
 }
 
@@ -440,7 +447,7 @@ export const syncInsights = onSchedule(
     timeZone: 'America/Sao_Paulo',
     retryCount: 1,
     region: 'southamerica-east1',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId],
   },
   async () => {
     console.log('[syncInsights] Iniciando')
@@ -479,7 +486,7 @@ export const collectInstagram = onSchedule(
     region: 'southamerica-east1',
     timeoutSeconds: 540,
     memory: '512MiB',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId],
   },
   async () => {
     console.log('[collectInstagram] Iniciando coleta')

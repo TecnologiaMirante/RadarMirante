@@ -3,18 +3,22 @@
 
 // Mapeamento estático de conta → perfil.
 // Atualizar ao adicionar novas contas em getActiveAccounts().
-export const ACCOUNT_PROFILES: Record<string, 'editorial' | 'viral'> = {
-  imirante:        'editorial',
-  tvmirante:       'viral',
-  imiranteesporte: 'viral',
+export const ACCOUNT_PROFILES: Record<string, 'editorial' | 'viral' | 'politica'> = {
+  imirante:         'editorial',
+  tvmirante:        'viral',
+  imiranteesporte:  'viral',
+  imirantepolitica: 'politica',
 }
 
 // Tetos de scoring por perfil.
-// 'editorial': conta grande, alto engajamento (iMirante)
+// 'editorial': conta grande, alto engajamento (iMirante, notícias gerais)
 // 'viral':     conta menor, engajamento mais baixo — tetos menores = maior sensibilidade
+// 'politica':  conteúdo político — bursts rápidos, menor volume absoluto mas alta intensidade
+//              50 coment = relevante, 150+ = repercutindo, velocidade 0.8/min é alta
 export const PROFILE_SCORING = {
   editorial: { commentCeiling: 300, velocityMaxPerMin: 2.0, uniqueAuthorMax: 20 },
   viral:     { commentCeiling: 75,  velocityMaxPerMin: 0.5, uniqueAuthorMax: 8  },
+  politica:  { commentCeiling: 200, velocityMaxPerMin: 0.8, uniqueAuthorMax: 12 },
 } as const
 
 export const RADAR_CONFIG = {

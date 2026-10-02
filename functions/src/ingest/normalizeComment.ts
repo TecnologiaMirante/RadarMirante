@@ -14,6 +14,7 @@ export async function normalizeAndSaveComment(
   platform: SocialPlatform,
   postId: string,
   raw: RawComment,
+  account = 'imirante',
 ): Promise<{ commentId: string; isNew: boolean }> {
   const commentsRef = db.collection('posts').doc(postId).collection('comments')
 
@@ -30,9 +31,10 @@ export async function normalizeAndSaveComment(
   // Anonimização: hash do authorExternalId com salt da plataforma
   const authorHash = hashAuthor(platform, raw.authorExternalId)
 
-  const newComment: Omit<RadarComment, 'id'> = {
+  const newComment: Omit<RadarComment, 'id'> & { account: string } = {
     externalId: raw.externalId,
     postId,
+    account,
     platform,
     text: raw.text,
     authorHash,

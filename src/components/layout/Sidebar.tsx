@@ -9,11 +9,13 @@ import { useAccount } from '@/contexts/AccountContext'
 import imiranteLogo from '@/assets/imirante_logo.png'
 import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 import tvmiranteLogo from '@/assets/tvmirante_logo.png'
+import imirantepoliticaLogo from '@/assets/imirantepolitica_logo.png'
 
 const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
   imiranteesporte: imiranteEsporteLogo,
   tvmirante: tvmiranteLogo,
+  imirantepolitica: imirantepoliticaLogo,
 }
 
 const NAV_GROUPS = [
@@ -28,7 +30,7 @@ const NAV_GROUPS = [
     label: 'Conteúdo',
     items: [
       { to: '/analises',  icon: Sparkles,   label: 'Análises',      desc: 'Pautas geradas pela IA' },
-      { to: '/instagram', icon: Instagram,  label: 'Instagram',     desc: 'Métricas do perfil' },
+      { to: '/insights',  icon: Instagram,  label: 'Insights',      desc: 'Métricas do perfil' },
     ],
   },
   {

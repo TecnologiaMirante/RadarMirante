@@ -14,7 +14,9 @@ const SPAM_INDICATORS = [
   /whatsapp|telegram/i,   // chamadas para outros canais
 ]
 
-const MIN_COMMENT_LENGTH = 3
+// Nota: não filtramos por comprimento de texto. Emojis isolados ("😡", "👏") têm
+// length=2 em JS (surrogate pairs) mas são reações legítimas, especialmente em
+// conteúdo político. Filtrar por length causaria falsos positivos massivos.
 const MAX_AUTHOR_CONCENTRATION_THRESHOLD = 0.4 // 40% de comentários de um único autor
 
 export function calculatePenalties(comments: RadarComment[]): PenaltyResult {
@@ -51,7 +53,7 @@ export function calculatePenalties(comments: RadarComment[]): PenaltyResult {
 
 function isLikelySpam(comment: RadarComment): boolean {
   const text = comment.text.trim()
-  if (text.length < MIN_COMMENT_LENGTH) return true
+  if (text.length === 0) return true
   return SPAM_INDICATORS.some((pattern) => pattern.test(text))
 }
 

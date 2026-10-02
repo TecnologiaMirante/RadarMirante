@@ -195,10 +195,14 @@ export async function getPostComments(postId: string, maxItems = 50): Promise<im
   )
 }
 
-export async function getRecentCommentTexts(sinceMs: number, toMs?: number, maxItems = 2000): Promise<string[]> {
-  const filterAndMap = (docs: import('firebase/firestore').QueryDocumentSnapshot[]) =>
+export async function getRecentCommentTexts(sinceMs: number, toMs?: number, account: RadarAccount = 'imirante', maxItems = 2000): Promise<string[]> {
+  const filterAndMap = (docs: import('firebase/firestore').QueryDocumentSnapshot[], accountPostIds?: Set<string>) =>
     docs
       .filter((d) => {
+        if (accountPostIds !== undefined) {
+          const postId = d.ref.parent.parent?.id
+          if (!postId || !accountPostIds.has(postId)) return false
+        }
         const ts = d.data().publishedAt as { toMillis?: () => number } | undefined
         if (!ts?.toMillis) return false
         const ms = ts.toMillis()
@@ -207,21 +211,32 @@ export async function getRecentCommentTexts(sinceMs: number, toMs?: number, maxI
       .map((d) => (d.data().text as string) ?? '')
       .filter(Boolean)
 
+  // For non-imirante accounts, resolve their post IDs first so we can
+  // filter collectionGroup results without relying on a field that may
+  // not exist on older comment documents.
+  let accountPostIds: Set<string> | undefined
+  if (account !== 'imirante') {
+    const postsSnap = await getDocs(query(
+      collection(db, 'posts'),
+      where('account', '==', account),
+    ))
+    accountPostIds = new Set(postsSnap.docs.map((d) => d.id))
+    if (accountPostIds.size === 0) return []
+  }
+
   try {
-    // Query ordenada: traz os mais recentes primeiro (requer índice COLLECTION_GROUP)
     const snap = await getDocs(query(
       collectionGroup(db, 'comments'),
       orderBy('publishedAt', 'desc'),
       limit(maxItems),
     ))
-    return filterAndMap(snap.docs)
+    return filterAndMap(snap.docs, accountPostIds)
   } catch {
-    // Fallback enquanto o índice ainda está construindo
     const snap = await getDocs(query(
       collectionGroup(db, 'comments'),
       limit(maxItems),
     ))
-    return filterAndMap(snap.docs)
+    return filterAndMap(snap.docs, accountPostIds)
   }
 }
 

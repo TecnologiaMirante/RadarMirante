@@ -367,6 +367,7 @@ export class InstagramConnector implements SocialConnector {
       batch.set(ref, {
         externalId: c.externalId,
         postId,
+        account: this.radarAccountId,
         platform: 'instagram',
         text: c.text,
         authorHash: hashAuthor(c.authorExternalId),

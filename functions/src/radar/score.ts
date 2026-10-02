@@ -140,9 +140,20 @@ export function calculateStatisticalTrendScore(input: ScoreInput): TrendScoreBre
     input.authorConcentration * RADAR_CONFIG.score.maxAuthorConcentrationPenalty,
   )
 
-  const finalScore = Math.round(
+  const velocityFinalScore = Math.round(
     Math.max(0, applyPenalties(rawScore, spamPenalty, duplicatePenalty, authorConcentrationPenalty)),
   )
+
+  // O volume acumulado é sempre um piso mínimo para o score.
+  // Garante que posts com alto engajamento histórico não sejam penalizados
+  // por velocidade baixa (post mais antigo) ou por baseline de outra conta.
+  const fallbackScore = Math.round(
+    Math.max(0, applyPenalties(
+      calculateEngagementFallback(input.commentCount, input.likesCount ?? 0, input.commentCeiling),
+      spamPenalty, duplicatePenalty, authorConcentrationPenalty,
+    )),
+  )
+  const finalScore = Math.max(velocityFinalScore, fallbackScore)
 
   const confidence = hasBaseline ? 0.8 : 0.4
 
