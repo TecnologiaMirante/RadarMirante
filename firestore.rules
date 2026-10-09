@@ -45,6 +45,12 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['role', 'isAdmin', 'accounts', 'disabled', 'updatedBy', 'updatedByEmail', 'updatedAt']);
 
+      // Admins can manage account access for other users
+      allow update: if isCurrentUserAdmin() &&
+        userId != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['accounts', 'updatedBy', 'updatedByEmail', 'updatedAt']);
+
       // Legacy: any admin can toggle isAdmin on other users
       allow update: if isCurrentUserAdmin() &&
         userId != request.auth.uid &&
@@ -173,6 +179,11 @@ service cloud.firestore {
       }
 
       match /audience/{audienceId} {
+        allow read: if isMiranteUser();
+        allow write: if false;
+      }
+
+      match /aggregateInsights/{docId} {
         allow read: if isMiranteUser();
         allow write: if false;
       }

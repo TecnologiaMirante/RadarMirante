@@ -29,12 +29,14 @@ type Tab = 'users' | 'invites' | 'activity'
 function UserCard({
   member,
   isSelf,
-  canEdit,
+  canManageAccounts,
+  canManageRoles,
   availableAccounts,
 }: {
   member: ReturnType<typeof useTeamMembers>['members'][number]
   isSelf: boolean
-  canEdit: boolean
+  canManageAccounts: boolean
+  canManageRoles: boolean
   availableAccounts: ReturnType<typeof useAccount>['accounts']
 }) {
   const [role, setRoleState]         = useState<UserRole>(member.role)
@@ -54,10 +56,19 @@ function UserCard({
     setSaveTimer(t)
   }
 
-  const autoSave = useCallback(async (newRole: UserRole, newAccounts: string[]) => {
+  const saveRole = useCallback(async (newRole: UserRole) => {
     setSaveState('saving')
     try {
       await setUserRole(member.uid, newRole)
+      flashSaved()
+    } catch {
+      setSaveState('error')
+    }
+  }, [member.uid]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveAccounts = useCallback(async (newAccounts: string[]) => {
+    setSaveState('saving')
+    try {
       await setUserAccounts(member.uid, newAccounts)
       flashSaved()
     } catch {
@@ -68,7 +79,7 @@ function UserCard({
   function handleRoleChange(r: UserRole) {
     if (r === role) return
     setRoleState(r)
-    void autoSave(r, accounts)
+    void saveRole(r)
   }
 
   function handleAccountToggle(id: string) {
@@ -76,7 +87,7 @@ function UserCard({
       ? accounts.filter(a => a !== id)
       : [...accounts, id]
     setAccountsState(next)
-    void autoSave(role, next)
+    void saveAccounts(next)
   }
 
   async function handleToggleDisabled() {
@@ -146,7 +157,7 @@ function UserCard({
             )}
           </div>
 
-          {canEdit && !isSelf && !isSuperAdminMember && (
+          {canManageRoles && !isSelf && !isSuperAdminMember && (
             <button
               onClick={() => void handleToggleDisabled()}
               disabled={saveState === 'saving'}
@@ -171,7 +182,7 @@ function UserCard({
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-yellow-500/10 text-yellow-600 border border-yellow-500/30">
             <Crown className="w-3 h-3" /> Super Admin
           </div>
-        ) : canEdit && !isSelf ? (
+        ) : canManageRoles && !isSelf ? (
           <div className="flex rounded-lg border border-border overflow-hidden w-fit">
             {ROLE_OPTIONS.map(opt => (
               <button
@@ -211,7 +222,7 @@ function UserCard({
             <Lock className="w-3 h-3" />
             <span>Acesso total (admins veem tudo)</span>
           </div>
-        ) : canEdit && !isSelf && availableAccounts.length > 0 ? (
+        ) : canManageAccounts && !isSelf && availableAccounts.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {availableAccounts.map(acc => {
               const active = accounts.includes(acc.id)
@@ -271,7 +282,8 @@ export function AdminPanel() {
   const { accounts: availableAccounts } = useAccount()
   const [tab, setTab] = useState<Tab>('users')
 
-  const isSuperAdmin = currentRole === 'superadmin'
+  const isSuperAdmin      = currentRole === 'superadmin'
+  const canManageAccounts = currentRole === 'admin' || currentRole === 'superadmin'
 
   return (
     <div className="space-y-4">
@@ -315,7 +327,7 @@ export function AdminPanel() {
             <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5 flex items-center gap-2">
               <Lock className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
               <p className="text-xs text-muted-foreground">
-                Somente Super Admins podem editar papéis, acessos e desativar usuários.
+                Você pode gerenciar o acesso às contas de cada usuário. Apenas Super Admins podem alterar papéis e desativar usuários.
               </p>
             </div>
           )}
@@ -342,7 +354,8 @@ export function AdminPanel() {
                   key={m.uid}
                   member={m}
                   isSelf={m.uid === user?.uid}
-                  canEdit={isSuperAdmin}
+                  canManageAccounts={canManageAccounts}
+                  canManageRoles={isSuperAdmin}
                   availableAccounts={availableAccounts}
                 />
               ))}

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Radio, RefreshCw, MessageCircle, LayoutGrid, List,
   TrendingUp, FileText, Activity, Search, X,
-  Heart, Eye, Zap, Award, Clock, ArrowUpRight, Maximize2, CalendarClock,
+  Heart, Eye, Zap, Award, Clock, ArrowUpRight, Maximize2, Play,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import { getDoc, doc } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import type { SortOption, RadarPost } from '@/types/radar'
 import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
+import { MonitoringSince } from '@/components/ui/MonitoringSince'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -140,6 +141,12 @@ function TopPostItem({ post, rank }: { post: RadarPost; rank: number }) {
             <Heart className="w-2 h-2" />
             {post.metrics.likes >= 1000 ? `${(post.metrics.likes/1000).toFixed(1)}k` : post.metrics.likes}
           </span>
+          {(post.insights?.plays ?? 0) > 0 && (
+            <span className="flex items-center gap-0.5 text-[10px] text-pink-400">
+              <Play className="w-2 h-2 fill-current" />
+              {(post.insights!.plays! >= 1000) ? `${(post.insights!.plays!/1000).toFixed(1)}k` : post.insights!.plays}
+            </span>
+          )}
         </div>
       </div>
       {isTrending && <span className="dot-blink w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0 mt-1" />}
@@ -165,12 +172,9 @@ function StatRow({ icon, label, value, accent }: {
 export default function Radar() {
   const { posts, filters, setFilters, loading, error, refresh } = useRadar()
   const { account, getAccount } = useAccount()
+  const accountConfig = getAccount(account)
   const accountColor = ACCOUNT_COLORS[account]
   const pageTitle = ACCOUNT_PAGE_TITLES[account]
-  const accountConfig = getAccount(account)
-  const collectingSince = accountConfig?.collectingSince
-    ? new Date(accountConfig.collectingSince + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    : undefined
   const [cloudPeriod, setCloudPeriod] = useState(CLOUD_PERIODS[4].value)
   const [cloudTexts, setCloudTexts] = useState<string[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
@@ -415,27 +419,12 @@ export default function Radar() {
                 </span>
               )}
             </p>
-            {collectingSince && (
-              <div className="flex items-center gap-1 mt-1">
-                <CalendarClock className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
-                <span className="text-[10px] text-muted-foreground/50">
-                  Monitorando desde {collectingSince}
-                </span>
-                <InfoTip side="bottom">
-                  <p className="font-semibold text-foreground mb-1.5">Início da coleta</p>
-                  <p className="text-muted-foreground mb-1.5">
-                    O Radar começou a monitorar essa conta em <strong className="text-foreground">{collectingSince}</strong>.
-                  </p>
-                  <p className="text-muted-foreground">
-                    Posts mais antigos podem aparecer com a data original de publicação,
-                    mas <strong className="text-foreground">sem histórico de snapshots de engajamento</strong> (curvas de crescimento, score, etc.) — esse dado só existe a partir do início da coleta.
-                  </p>
-                </InfoTip>
-              </div>
-            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {accountConfig?.collectingSince && (
+            <MonitoringSince since={accountConfig.collectingSince} />
+          )}
           <DateDropdown
             value={filters.time}
             customFrom={filters.customFrom}

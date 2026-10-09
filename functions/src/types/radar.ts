@@ -7,7 +7,7 @@ type Timestamp = firestore.Timestamp
 export type SocialPlatform = 'imirante' | 'instagram' | 'facebook' | 'youtube' | 'x'
 
 // Perfil determina qual prompt de IA e qual schema de análise usar
-export type AccountProfile = 'editorial' | 'viral'
+export type AccountProfile = 'editorial' | 'viral' | 'politica' | 'radio' | 'esporte'
 
 // ─── Post ─────────────────────────────────────────────────────────────────────
 

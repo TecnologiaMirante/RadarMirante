@@ -10,12 +10,14 @@ import imiranteLogo from '@/assets/imirante_logo.png'
 import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 import tvmiranteLogo from '@/assets/tvmirante_logo.png'
 import imirantepoliticaLogo from '@/assets/imirantepolitica_logo.png'
+import mirantefmLogo from '@/assets/mirantefm96_logo.png'
 
 const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
   imiranteesporte: imiranteEsporteLogo,
   tvmirante: tvmiranteLogo,
   imirantepolitica: imirantepoliticaLogo,
+  mirantefm: mirantefmLogo,
 }
 
 const NAV_GROUPS = [

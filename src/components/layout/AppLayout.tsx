@@ -2,7 +2,6 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { useAccount } from '@/contexts/AccountContext'
-import { EmProducao } from '@/components/ui/EmProducao'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -100,7 +99,7 @@ function NoAccessScreen() {
 }
 
 export default function AppLayout() {
-  const { account, accounts, accountsLoading } = useAccount()
+  const { accounts, accountsLoading } = useAccount()
   const location = useLocation()
 
   const isSettingsPage = location.pathname === '/settings'
@@ -108,8 +107,6 @@ export default function AppLayout() {
   let content: React.ReactNode
   if (!accountsLoading && accounts.length === 0 && !isSettingsPage) {
     content = <NoAccessScreen />
-  } else if (account === 'imiranteesporte') {
-    content = <EmProducao titulo="Mirante Radar Esporte" descricao="O Radar do Mirante Esporte está sendo configurado e estará disponível em breve." />
   } else {
     content = <Outlet />
   }

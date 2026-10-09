@@ -10,6 +10,7 @@ import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
 import { useTimeFilter } from '@/hooks/useTimeFilter'
 import { getOpportunities, updateOpportunityStatus } from '@/services/radar'
 import { useAccount } from '@/contexts/AccountContext'
+import { MonitoringSince } from '@/components/ui/MonitoringSince'
 import type { Opportunity, OpportunityStatus } from '@/types/radar'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
@@ -198,7 +199,8 @@ function OpportunityCard({ opp, onStatusChange }: { opp: Opportunity; onStatusCh
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function AnalysesPage() {
-  const { account } = useAccount()
+  const { account, getAccount } = useAccount()
+  const accountConfig = getAccount(account)
   const [allOpps, setAllOpps] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<OpportunityStatus | 'all'>('all')
@@ -329,6 +331,9 @@ export default function AnalysesPage() {
               </button>
             ))}
           </div>
+          {accountConfig?.collectingSince && (
+            <MonitoringSince since={accountConfig.collectingSince} />
+          )}
           <DateDropdown
             value={displayTime}
             customFrom={customFrom}

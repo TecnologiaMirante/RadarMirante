@@ -33,6 +33,10 @@ const tvmiranteToken            = defineSecret('TVMIRANTE_INSTAGRAM_ACCESS_TOKEN
 const tvmiranteAccountId        = defineSecret('TVMIRANTE_INSTAGRAM_ACCOUNT_ID')
 const imirantepoliticaToken     = defineSecret('instagram-token-imirantepolitica')
 const imirantepoliticaAccountId = defineSecret('instagram-account-id-imirantepolitica')
+const mirantefmToken              = defineSecret('instagram-token-mirantefm')
+const mirantefmAccountId          = defineSecret('instagram-account-id-mirantefm')
+const imiranteesporteToken        = defineSecret('instagram-token-imiranteesporte')
+const imiranteesporteAccountId    = defineSecret('instagram-account-id-imiranteesporte')
 
 interface AccountEntry {
   radarId: string
@@ -60,6 +64,18 @@ function getActiveAccounts(): AccountEntry[] {
       profile: 'editorial' as AccountProfile,
       getToken: () => imirantepoliticaToken.value(),
       getAccountId: () => imirantepoliticaAccountId.value(),
+    },
+    {
+      radarId: 'mirantefm',
+      profile: 'radio' as AccountProfile,
+      getToken: () => mirantefmToken.value(),
+      getAccountId: () => mirantefmAccountId.value(),
+    },
+    {
+      radarId: 'imiranteesporte',
+      profile: 'esporte' as AccountProfile,
+      getToken: () => imiranteesporteToken.value(),
+      getAccountId: () => imiranteesporteAccountId.value(),
     },
   ]
 }
@@ -447,7 +463,9 @@ export const syncInsights = onSchedule(
     timeZone: 'America/Sao_Paulo',
     retryCount: 1,
     region: 'southamerica-east1',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId],
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId],
   },
   async () => {
     console.log('[syncInsights] Iniciando')
@@ -486,7 +504,7 @@ export const collectInstagram = onSchedule(
     region: 'southamerica-east1',
     timeoutSeconds: 540,
     memory: '512MiB',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId],
   },
   async () => {
     console.log('[collectInstagram] Iniciando coleta')

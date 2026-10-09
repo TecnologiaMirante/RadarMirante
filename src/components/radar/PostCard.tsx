@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, MessageCircle, Heart, Eye, Clock, Zap, Loader2 } from 'lucide-react'
+import { ExternalLink, MessageCircle, Heart, Eye, Clock, Zap, Loader2, Play } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
@@ -48,6 +48,12 @@ const STATUS_CONFIG: Record<
   },
 }
 
+function fmtN(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toLocaleString('pt-BR')
+}
+
 export function PostCard({ post }: { post: RadarPost }) {
   const navigate = useNavigate()
   const [analyzing, setAnalyzing] = useState(false)
@@ -56,6 +62,8 @@ export function PostCard({ post }: { post: RadarPost }) {
   const isTrending = post.status === 'trending'
   const isCandidate = post.status === 'candidate'
   const canAnalyze = post.status === 'trending' || post.status === 'candidate'
+  const plays = post.insights?.plays ?? 0
+  const isReel = post.url.includes('/reel/') || plays > 0
 
   async function handleAnalyze(e: React.MouseEvent) {
     e.stopPropagation()
@@ -96,9 +104,16 @@ export function PostCard({ post }: { post: RadarPost }) {
 
       <CardContent className="p-4 relative space-y-3">
 
-        {/* Header: platform + external link */}
+        {/* Header: platform + Reel badge + external link */}
         <div className="flex items-center justify-between gap-2">
-          <PlatformBadge platform={post.platform} />
+          <div className="flex items-center gap-1.5">
+            <PlatformBadge platform={post.platform} />
+            {isReel && (
+              <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide bg-pink-500/15 text-pink-400 border border-pink-500/20 px-1.5 py-0.5 rounded-full">
+                <Play className="w-2 h-2 fill-current" /> Reel
+              </span>
+            )}
+          </div>
           <a
             href={post.url}
             target="_blank"
@@ -157,6 +172,12 @@ export function PostCard({ post }: { post: RadarPost }) {
                     ? `${(post.metrics.views / 1000).toFixed(1)}k`
                     : post.metrics.views.toLocaleString('pt-BR')}
                 </strong>
+              </span>
+            )}
+            {plays > 0 && (
+              <span className="flex items-center gap-0.5 text-pink-400">
+                <Play className="w-3 h-3 fill-current" />
+                <strong className="tabular-nums">{fmtN(plays)}</strong>
               </span>
             )}
           </div>

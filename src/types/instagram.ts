@@ -11,6 +11,8 @@ export interface InstagramDailyInsight {
   websiteClicks: number
   followerCount: number
   followerGain: number    // diferença em relação ao dia anterior
+  accountsEngaged?: number  // contas que curtiram/comentaram/salvaram/compartilharam
+  totalInteractions?: number // soma de todas as interações
   updatedAt: Timestamp
 }
 
@@ -21,7 +23,10 @@ export interface InstagramPostInsights {
   reach: number
   impressions: number
   saved: number
+  shares?: number
   videoViews?: number
+  plays?: number          // Reels: total de reproduções
+  avgWatchTime?: number   // Reels: tempo médio assistido em milissegundos
   updatedAt: Timestamp
 }
 
@@ -46,6 +51,29 @@ export interface InstagramAccountProfile {
 export interface InstagramOnlineFollowers {
   date: string           // 'YYYY-MM-DD'
   byHour: number[]       // index = hora (0-23), valor = % de seguidores online
+  updatedAt: Timestamp
+}
+
+// ─── Matriz de atividade semanal ──────────────────────────────────────────────
+// matrix[dayOfWeek (0=Dom)][hour (0-23)] = contagem absoluta de seguidores online
+
+export interface InstagramWeeklyActivity {
+  matrix: number[][]     // 7 linhas × 24 colunas
+  updatedAt: Timestamp
+}
+
+// ─── Insights agregados (últimos 30 dias) ─────────────────────────────────────
+// Salvo em instagramAccount/{radarId}/aggregateInsights/last30d
+
+export interface InstagramAggregateInsights {
+  views?: number
+  viewsByFollowType?: Record<string, number>        // FOLLOWER, NON_FOLLOWER
+  viewsByMediaType?: Record<string, number>         // POST, REEL, STORY
+  reach?: number
+  reachByFollowType?: Record<string, number>
+  reachByMediaType?: Record<string, number>
+  interactionsByFollowType?: Record<string, number>
+  interactionsByMediaType?: Record<string, number>
   updatedAt: Timestamp
 }
 

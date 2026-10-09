@@ -12,6 +12,7 @@ import { DateDropdown, getPresetLabel } from '@/components/ui/DateDropdown'
 import { useTimeFilter } from '@/hooks/useTimeFilter'
 import { getPosts, getRecentCommentTexts } from '@/services/radar'
 import { useAccount } from '@/contexts/AccountContext'
+import { MonitoringSince } from '@/components/ui/MonitoringSince'
 import { cn } from '@/lib/utils'
 import type { Timestamp } from 'firebase/firestore'
 import type { RadarPost } from '@/types/radar'
@@ -135,7 +136,8 @@ function TopPostRow({ post, rank }: { post: RadarPost; rank: number }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { account } = useAccount()
+  const { account, getAccount } = useAccount()
+  const accountConfig = getAccount(account)
   const [allPosts, setAllPosts] = useState<RadarPost[]>([])
   const [loading, setLoading] = useState(true)
   const { time: displayTime, customFrom, customTo, set: setDisplayTime } = useTimeFilter()
@@ -284,13 +286,18 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
-        <DateDropdown
-          value={displayTime}
-          customFrom={customFrom}
-          customTo={customTo}
-          onChange={(time, from, to) => setDisplayTime(time, from, to)}
-          overrideAllLabel={overrideAllLabel}
-        />
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {accountConfig?.collectingSince && (
+            <MonitoringSince since={accountConfig.collectingSince} />
+          )}
+          <DateDropdown
+            value={displayTime}
+            customFrom={customFrom}
+            customTo={customTo}
+            onChange={(time, from, to) => setDisplayTime(time, from, to)}
+            overrideAllLabel={overrideAllLabel}
+          />
+        </div>
       </div>
 
       {/* KPI grid — 4 colunas × 2 linhas */}

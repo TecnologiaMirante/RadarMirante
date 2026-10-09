@@ -42,10 +42,19 @@ function extractDailyValues(result: IGInsightResultV21): { date: string; value: 
   // Formato v21 com breakdown de tempo
   const tb = result.total_value?.breakdowns?.find(b => b.dimension_keys.includes('time'))
   if (tb) {
-    return tb.results.map(r => ({
-      date: r.dimension_values[0] ?? toDateStr(new Date()),
-      value: r.value,
-    }))
+    return tb.results.map(r => {
+      const raw = r.dimension_values[0] ?? ''
+      // dimension_values pode ser Unix timestamp (string de 10 dígitos) ou YYYY-MM-DD
+      let date: string
+      if (/^\d{10}$/.test(raw)) {
+        date = toDateStr(new Date(parseInt(raw, 10) * 1000))
+      } else if (raw.length >= 10) {
+        date = raw.slice(0, 10)
+      } else {
+        date = toDateStr(new Date())
+      }
+      return { date, value: r.value }
+    })
   }
   // Formato v21 sem breakdown: valor único para o período inteiro — não é utilizável para tendências diárias
   return []
@@ -65,7 +74,8 @@ interface IGProfileResponse {
 }
 
 interface IGOnlineFollowers {
-  data: Record<string, number>
+  data?: { values?: { value: Record<string, number>; end_time?: string }[] }[]
+  error?: { code: number; message: string }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -195,12 +205,6 @@ export async function syncInstagramInsights(
         date,
         followerCount,
         followerGain,
-        // reach/impressions/profileViews/websiteClicks não disponíveis com o nível atual
-        // de permissão do app Meta (metric_type=total_value requer aprovação adicional)
-        impressions: 0,
-        reach: 0,
-        profileViews: 0,
-        websiteClicks: 0,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true })
     }
@@ -210,97 +214,306 @@ export async function syncInstagramInsights(
     console.warn('[syncInstagramInsights] follower_count: sem dados')
   }
 
-  // ── 2b. Métricas de engajamento (formato legado, sem metric_type) ────────────
-  // reach, impressions, profile_views, website_clicks com period=day.
-  // metric_type=total_value (formato v21) retorna #10 permission denied.
-  // O formato legado (.values[]) pode funcionar sem aprovação adicional.
-  // reach funciona com formato legado (.values[]); views/profile_views/website_clicks
-  // exigem metric_type=total_value (requer Meta App Review adicional).
-  const reachResponse = await igFetch<IGInsightsResponse>(
-    `/${accountId}/insights`,
-    token,
-    {
-      metric: 'reach',
-      period: 'day',
-      since: String(unixFromDate(since)),
-      until: String(unixFromDate(until)),
-    },
-  ).catch(() => null)
+  // ── 2b. Métricas de engajamento (formato legado, period=day) ────────────────
+  // reach, impressions, profile_views, website_clicks funcionam com o formato
+  // legado (.values[]) sem metric_type — desde que o token tenha instagram_manage_insights.
 
-  if (reachResponse?.data?.[0] && !reachResponse.error && followerDates.length > 0) {
-    const reachByDate: Record<string, number> = {}
-    for (const { date, value } of extractDailyValues(reachResponse.data[0])) {
-      reachByDate[date] = value
+  async function syncDailyMetric(
+    metric: string,
+    firestoreField: string,
+    label: string,
+    extraParams: Record<string, string> = {},
+  ): Promise<void> {
+    const resp = await igFetch<IGInsightsResponse>(
+      `/${accountId}/insights`,
+      token,
+      {
+        metric,
+        period: 'day',
+        since: String(unixFromDate(since)),
+        until: String(unixFromDate(until)),
+        ...extraParams,
+      },
+    ).catch(() => null)
+
+    if (!resp || resp.error || !resp.data?.[0] || followerDates.length === 0) {
+      if (resp?.error) {
+        console.warn(`[syncInstagramInsights] ${label} indisponível: ${resp.error.message}`)
+      }
+      return
     }
 
-    const reachBatch = db.batch()
+    const byDate: Record<string, number> = {}
+    for (const { date, value } of extractDailyValues(resp.data[0])) {
+      byDate[date] = value
+    }
+
+    const batch = db.batch()
     let updated = 0
     for (const date of followerDates) {
-      if (reachByDate[date] !== undefined && reachByDate[date] > 0) {
-        reachBatch.set(
+      if (byDate[date] !== undefined && byDate[date] > 0) {
+        batch.set(
           db.collection('instagramAccount').doc(radarId).collection('insights').doc(date),
-          { reach: reachByDate[date], updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+          { [firestoreField]: byDate[date], updatedAt: admin.firestore.FieldValue.serverTimestamp() },
           { merge: true },
         )
         updated++
       }
     }
     if (updated > 0) {
-      await reachBatch.commit()
-      console.log(`[syncInstagramInsights] reach salvo: ${updated} dias`)
+      await batch.commit()
+      console.log(`[syncInstagramInsights] ${label} salvo: ${updated} dias`)
     }
-  } else if (reachResponse?.error) {
-    console.warn(`[syncInstagramInsights] reach indisponível: ${reachResponse.error.message}`)
   }
 
-  // ── 3. Online followers por hora ─────────────────────────────────────────────
-  const onlineRes = await igFetch<IGOnlineFollowers>(
-    `/${accountId}/insights`,
-    token,
-    {
-      metric: 'online_followers',
-      period: 'lifetime',
-    },
-  ).catch(() => null)
+  // reach: formato legado, retorna série de 30 dias com since/until
+  await syncDailyMetric('reach', 'reach', 'reach')
 
-  if (onlineRes?.data) {
-    const hourMap = onlineRes.data
-    const byHour: number[] = Array(24).fill(0)
-    const total = Object.values(hourMap).reduce((s, v) => s + v, 0)
+  // Métricas v21: requerem metric_type=total_value. Usa period=lifetime + breakdown=time
+  // + since/until para obter série histórica de 30 dias. Se a API não retornar série,
+  // cai em fallback que salva apenas o valor de hoje.
+  async function syncDailyMetricV21(metric: string, firestoreField: string, label: string): Promise<void> {
+    // Tentativa 1: série histórica com breakdown temporal (period=lifetime)
+    const histResp = await igFetch<IGInsightsResponse>(
+      `/${accountId}/insights`,
+      token,
+      {
+        metric,
+        metric_type: 'total_value',
+        period: 'lifetime',
+        breakdown: 'time',
+        since: String(unixFromDate(since)),
+        until: String(unixFromDate(until)),
+      },
+    ).catch(() => null)
 
-    for (const [hourStr, count] of Object.entries(hourMap)) {
-      const h = parseInt(hourStr, 10)
-      if (h >= 0 && h <= 23 && total > 0) {
-        byHour[h] = Math.round((count / total) * 100 * 10) / 10
+    if (histResp && !histResp.error && histResp.data?.[0]) {
+      const dailyValues = extractDailyValues(histResp.data[0])
+      if (dailyValues.length > 0) {
+        const batch = db.batch()
+        let updated = 0
+        for (const { date, value } of dailyValues) {
+          if (value > 0) {
+            batch.set(
+              db.collection('instagramAccount').doc(radarId).collection('insights').doc(date),
+              { [firestoreField]: value, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+              { merge: true },
+            )
+            updated++
+          }
+        }
+        if (updated > 0) {
+          await batch.commit()
+          console.log(`[syncInstagramInsights] ${label} histórico: ${updated} dias`)
+        }
+        return
       }
     }
 
-    await db.collection('instagramAccount').doc(radarId).collection('onlineFollowers').doc(toDateStr(new Date())).set({
-      date: toDateStr(new Date()),
-      byHour,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
-    console.log('[syncInstagramInsights] Online followers salvos')
-  }
+    if (histResp?.error) {
+      console.warn(`[syncInstagramInsights] ${label} histórico indisponível: ${histResp.error.message}`)
+    }
 
-  // ── 4. Audience demographics ─────────────────────────────────────────────────
-  const audienceMetrics = ['audience_gender_age', 'audience_country', 'audience_city'] as const
-  for (const metric of audienceMetrics) {
-    const res = await igFetch<{ data: { name: string; values: { value: Record<string, number> }[] }[]; error?: { message: string } }>(
+    // Fallback: apenas valor de hoje
+    const resp = await igFetch<IGInsightsResponse>(
       `/${accountId}/insights`,
       token,
-      { metric, period: 'lifetime' },
+      { metric, metric_type: 'total_value', period: 'day' },
     ).catch(() => null)
 
-    if (!res || res.error || !res.data?.[0]?.values?.[0]) continue
-    const data = res.data[0].values[0].value
-    await db.collection('instagramAccount').doc(radarId).collection('audience').doc(metric).set({
+    if (!resp || resp.error || !resp.data?.[0]) {
+      if (resp?.error) console.warn(`[syncInstagramInsights] ${label} indisponível: ${resp.error.message}`)
+      return
+    }
+
+    const value = resp.data[0].total_value?.value ?? 0
+    if (value > 0) {
+      const today = toDateStr(new Date())
+      await db.collection('instagramAccount').doc(radarId).collection('insights').doc(today).set(
+        { [firestoreField]: value, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+        { merge: true },
+      )
+      console.log(`[syncInstagramInsights] ${label} hoje: ${value}`)
+    }
+  }
+
+  // 'views' é o nome v21 de impressions; os demais mantêm o mesmo nome
+  await syncDailyMetricV21('views',             'impressions',       'impressões')
+  await syncDailyMetricV21('profile_views',     'profileViews',      'visitas ao perfil')
+  await syncDailyMetricV21('website_clicks',    'websiteClicks',     'cliques no link')
+  // accounts_engaged: contas únicas que interagiram (curtiu/comentou/salvou/compartilhou)
+  await syncDailyMetricV21('accounts_engaged',  'accountsEngaged',   'contas engajadas')
+  // total_interactions: soma de curtidas + comentários + salvos + compartilhamentos
+  await syncDailyMetricV21('total_interactions','totalInteractions',  'interações totais')
+
+  // ── 3. Online followers — matriz 7×24 (dia da semana × hora) ────────────────
+  const onlineRes = await igFetch<IGOnlineFollowers>(
+    `/${accountId}/insights`,
+    token,
+    { metric: 'online_followers', period: 'lifetime' },
+  ).catch(() => null)
+
+  if (onlineRes?.error) {
+    console.warn(`[syncInstagramInsights] online_followers erro: ${onlineRes.error.message}`)
+  } else {
+    console.log(`[syncInstagramInsights] online_followers raw: ${JSON.stringify(onlineRes).slice(0, 500)}`)
+    const valuesArr = onlineRes?.data?.[0]?.values ?? []
+    // Monta matriz 7×24: matrix[dayOfWeek (0=Dom)][hour (0-23)]
+    const matrix: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
+    let populated = 0
+
+    for (const entry of valuesArr) {
+      const v = entry?.value
+      if (!v || typeof v !== 'object' || Object.keys(v).length === 0) continue
+      // end_time é o fim do período de 24h; o dia real é o próprio end_time (UTC)
+      const endDate = entry.end_time ? new Date(entry.end_time) : null
+      if (!endDate) continue
+      const dow = endDate.getDay() // 0=Dom, 1=Seg, ..., 6=Sáb
+      for (const [hourStr, count] of Object.entries(v)) {
+        const h = parseInt(hourStr, 10)
+        if (h >= 0 && h <= 23) {
+          matrix[dow][h] = count as number
+          populated++
+        }
+      }
+    }
+
+    if (populated > 0) {
+      await db.collection('instagramAccount').doc(radarId)
+        .collection('onlineFollowers').doc('weekly').set({
+          matrix,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        })
+      console.log(`[syncInstagramInsights] Online followers matriz salva (${populated} células)`)
+    } else {
+      console.warn('[syncInstagramInsights] online_followers: sem dados')
+    }
+  }
+
+  // ── 3b. Aggregate insights com breakdowns (30 dias) ──────────────────────────
+  interface IGAggResp {
+    data?: { name: string; total_value?: { value?: number; breakdowns?: IGTotalValueBreakdown[] } }[]
+    error?: { code: number; message: string }
+  }
+
+  // Busca breakdown para um período com since/until. Soma todos os itens da série retornada.
+  // Fallback para "apenas hoje" se a API não retornar dados com range.
+  async function fetchBreakdown(
+    metric: string,
+    breakdown: string,
+    sinceDate: Date,
+    untilDate: Date,
+    label: string,
+  ): Promise<Record<string, number>> {
+    const resp = await igFetch<IGAggResp>(`/${accountId}/insights`, token, {
       metric,
+      metric_type: 'total_value',
+      period: 'day',
+      breakdown,
+      since: String(unixFromDate(sinceDate)),
+      until: String(unixFromDate(untilDate)),
+    }).catch(() => null)
+
+    if (resp && !resp.error && resp.data && resp.data.length > 0) {
+      const byKey: Record<string, number> = {}
+      for (const item of resp.data) {
+        for (const r of item.total_value?.breakdowns?.[0]?.results ?? []) {
+          const k = r.dimension_values[0]
+          byKey[k] = (byKey[k] ?? 0) + r.value
+        }
+      }
+      if (Object.keys(byKey).length > 0) {
+        console.log(`[agg${label}] ${metric}/${breakdown}: ${JSON.stringify(byKey)}`)
+        return byKey
+      }
+    }
+    if (resp?.error) console.warn(`[agg${label}] ${metric}/${breakdown}: ${resp.error.message}`)
+    return {}
+  }
+
+  // Salva aggregateInsights para um período específico
+  async function syncAggregateInsights(days: 7 | 14 | 30): Promise<void> {
+    const periodUntil = new Date()
+    const periodSince = new Date(periodUntil)
+    periodSince.setDate(periodSince.getDate() - days)
+    const label = String(days)
+
+    const [
+      viewsByFollow, viewsByMedia,
+      reachByFollow, reachByMedia,
+      interByFollow, interByMedia,
+    ] = await Promise.all([
+      fetchBreakdown('views', 'follow_type', periodSince, periodUntil, label),
+      fetchBreakdown('views', 'media_product_type', periodSince, periodUntil, label),
+      fetchBreakdown('reach', 'follow_type', periodSince, periodUntil, label),
+      fetchBreakdown('reach', 'media_product_type', periodSince, periodUntil, label),
+      fetchBreakdown('total_interactions', 'follow_type', periodSince, periodUntil, label),
+      fetchBreakdown('total_interactions', 'media_product_type', periodSince, periodUntil, label),
+    ])
+
+    const aggDoc: Record<string, unknown> = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }
+    if (Object.keys(viewsByFollow).length > 0) aggDoc.viewsByFollowType = viewsByFollow
+    if (Object.keys(viewsByMedia).length > 0) aggDoc.viewsByMediaType = viewsByMedia
+    if (Object.keys(reachByFollow).length > 0) aggDoc.reachByFollowType = reachByFollow
+    if (Object.keys(reachByMedia).length > 0) aggDoc.reachByMediaType = reachByMedia
+    if (Object.keys(interByFollow).length > 0) aggDoc.interactionsByFollowType = interByFollow
+    if (Object.keys(interByMedia).length > 0) aggDoc.interactionsByMediaType = interByMedia
+
+    if (Object.keys(aggDoc).length > 1) {
+      await db.collection('instagramAccount').doc(radarId)
+        .collection('aggregateInsights').doc(`last${days}d`).set(aggDoc, { merge: true })
+      console.log(`[syncInstagramInsights] Aggregate insights ${days}d salvos`)
+    }
+  }
+
+  await syncAggregateInsights(7)
+  await syncAggregateInsights(14)
+  await syncAggregateInsights(30)
+
+  // ── 4. Audience demographics (v21: follower_demographics com breakdown) ────────
+  // API v21 descontinuou audience_country/city/gender_age — usa follower_demographics
+  // com breakdown=country|city|age,gender. Resposta: total_value.breakdowns[0].results
+  interface IGDemographicsResponse {
+    data?: { total_value?: { breakdowns?: IGTotalValueBreakdown[] } }[]
+    error?: { code: number; message: string }
+  }
+
+  type AudienceDef = { breakdown: string; docId: string; toKey: (dims: string[]) => string }
+  const audienceDefs: AudienceDef[] = [
+    // gender/age: dimension_values = [age, gender] → chave 'M.18-24'
+    { breakdown: 'age,gender', docId: 'audience_gender_age', toKey: ([age, gender]) => `${gender}.${age}` },
+    { breakdown: 'country',    docId: 'audience_country',    toKey: ([country]) => country },
+    { breakdown: 'city',       docId: 'audience_city',       toKey: ([city]) => city },
+  ]
+
+  for (const { breakdown, docId, toKey } of audienceDefs) {
+    const res = await igFetch<IGDemographicsResponse>(
+      `/${accountId}/insights`,
+      token,
+      { metric: 'follower_demographics', period: 'lifetime', breakdown, metric_type: 'total_value' },
+    ).catch(() => null)
+
+    if (!res) { console.warn(`[syncInstagramInsights] audience ${docId}: sem resposta`); continue }
+    if (res.error) { console.warn(`[syncInstagramInsights] audience ${docId}: ${res.error.message}`); continue }
+
+    const results = res.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? []
+    if (results.length === 0) { console.warn(`[syncInstagramInsights] audience ${docId}: sem dados`); continue }
+
+    const data: Record<string, number> = {}
+    for (const r of results) {
+      const key = toKey(r.dimension_values)
+      data[key] = (data[key] ?? 0) + r.value
+    }
+
+    await db.collection('instagramAccount').doc(radarId).collection('audience').doc(docId).set({
+      metric: docId,
       data,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true })
+    console.log(`[syncInstagramInsights] audience ${docId}: ${Object.keys(data).length} entradas`)
   }
-  console.log('[syncInstagramInsights] Audience demographics salvos')
 
   // ── 5. Post-level insights para posts Instagram recentes ─────────────────────
   const postsSnap = await db
@@ -314,28 +527,56 @@ export async function syncInstagramInsights(
   const postBatch = db.batch()
 
   for (const postDoc of postsSnap.docs) {
-    const externalId: string = postDoc.data().externalId
+    const postData = postDoc.data()
+    const externalId: string = postData.externalId
     if (!externalId) continue
+
+    const postUrl: string = postData.url ?? ''
+    const isReel = postUrl.includes('/reel/') || (postData.insights?.plays ?? 0) > 0
+
+    // Para Reels: inclui ig_reels_avg_watch_time na mesma chamada (evita segundo round-trip)
+    const metricList = isReel
+      ? 'impressions,reach,saved,video_views,shares,plays,ig_reels_avg_watch_time'
+      : 'impressions,reach,saved,video_views,shares,plays'
 
     const insights = await igFetch<{ data: { name: string; values: { value: number }[] }[]; error?: { message: string } }>(
       `/${externalId}/insights`,
       token,
-      { metric: 'impressions,reach,saved,video_views' },
+      { metric: metricList },
     ).catch(() => null)
 
-    if (!insights || insights.error) continue
+    // Se Reel mas a chamada combinada falhou (API rejeita mix de métricas em alguns casos),
+    // faz fallback sem ig_reels_avg_watch_time
+    const insightsFinal = (!insights || insights.error) && isReel
+      ? await igFetch<{ data: { name: string; values: { value: number }[] }[]; error?: { message: string } }>(
+          `/${externalId}/insights`,
+          token,
+          { metric: 'impressions,reach,saved,video_views,shares,plays' },
+        ).catch(() => null)
+      : insights
+
+    if (!insightsFinal || insightsFinal.error) continue
 
     const getMetric = (name: string): number =>
-      insights.data?.find(m => m.name === name)?.values[0]?.value ?? 0
+      insightsFinal.data?.find(m => m.name === name)?.values[0]?.value ?? 0
 
-    postBatch.update(postDoc.ref, {
+    const postUpdate: Record<string, unknown> = {
       'insights.reach': getMetric('reach'),
       'insights.impressions': getMetric('impressions'),
       'insights.saved': getMetric('saved'),
       'insights.videoViews': getMetric('video_views'),
+      'insights.shares': getMetric('shares'),
+      'insights.plays': getMetric('plays'),
       'insights.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
+    }
+
+    const avgWatchTime = getMetric('ig_reels_avg_watch_time')
+    if (avgWatchTime > 0) {
+      postUpdate['insights.avgWatchTime'] = avgWatchTime
+    }
+
+    postBatch.update(postDoc.ref, postUpdate)
     postInsightsUpdated++
   }
 

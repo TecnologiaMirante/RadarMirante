@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, Clock, MessageCircle, Heart } from 'lucide-react'
+import { ExternalLink, Clock, MessageCircle, Heart, Play } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { ScoreBadge } from './ScoreBadge'
@@ -32,10 +32,18 @@ const SPARKLINE_COLOR: Record<RadarPost['status'], string> = {
   archived:   '#374151',
 }
 
+function fmtN(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toLocaleString('pt-BR')
+}
+
 export function PostRow({ post, rank }: { post: RadarPost; rank?: number }) {
   const navigate = useNavigate()
   const isTrending = post.status === 'trending'
   const statusInfo = STATUS_LABEL[post.status]
+  const plays = post.insights?.plays ?? 0
+  const isReel = post.platform === 'instagram' && (post.url.includes('/reel/') || plays > 0)
 
   const publishedAgo = formatDistanceToNow(post.publishedAt.toDate(), {
     addSuffix: true, locale: ptBR,
@@ -83,6 +91,11 @@ export function PostRow({ post, rank }: { post: RadarPost; rank?: number }) {
           )}>
             {statusInfo.text}
           </span>
+          {isReel && (
+            <span className="flex items-center gap-0.5 text-[9px] font-bold bg-pink-500/15 text-pink-400 border border-pink-500/20 px-1.5 py-0.5 rounded-full">
+              <Play className="w-2 h-2 fill-current" /> Reel
+            </span>
+          )}
           <span className="text-[10px] text-muted-foreground/45 flex items-center gap-0.5">
             <Clock className="w-2.5 h-2.5" />{publishedAgo}
           </span>
@@ -125,6 +138,18 @@ export function PostRow({ post, rank }: { post: RadarPost; rank?: number }) {
           <Heart className="w-2.5 h-2.5" />likes
         </p>
       </div>
+
+      {/* Plays (Reels only) */}
+      {plays > 0 && (
+        <div className="flex-shrink-0 w-12 text-right hidden lg:block">
+          <p className="text-sm font-semibold tabular-nums text-pink-400">
+            {fmtN(plays)}
+          </p>
+          <p className="text-[9px] text-muted-foreground/50 mt-0.5 uppercase tracking-wide flex items-center justify-end gap-0.5">
+            <Play className="w-2.5 h-2.5" />plays
+          </p>
+        </div>
+      )}
 
       {/* External link */}
       <a

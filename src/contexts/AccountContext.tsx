@@ -3,7 +3,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import { useAuth } from '@/hooks/useAuth'
 
-export type AccountProfile = 'editorial' | 'viral'
+export type AccountProfile = 'editorial' | 'viral' | 'politica' | 'radio' | 'esporte'
 
 export interface RadarAccountConfig {
   id: string
@@ -23,13 +23,14 @@ export type RadarAccount = string
 // and as backward-compat exports for existing consumers
 const STATIC_ACCOUNTS: RadarAccountConfig[] = [
   { id: 'imirante',         displayName: '@imirante',         shortName: 'iMirante', color: '#38B6FF', active: true,  emProducao: false, order: 0, profile: 'editorial', collectingSince: '2026-09-21' },
-  { id: 'imiranteesporte',  displayName: '@imiranteesporte',  shortName: 'Esporte',  color: '#91BD32', active: true,  emProducao: true,  order: 1, profile: 'editorial' },
-  { id: 'tvmirante',        displayName: '@tvmirante',        shortName: 'TV',       color: '#0049AF', active: true,  emProducao: true,  order: 2, profile: 'viral',      collectingSince: '2026-09-29' },
+  { id: 'imiranteesporte',  displayName: '@imiranteesporte',  shortName: 'Esporte',  color: '#91BD32', active: true,  emProducao: false, order: 1, profile: 'esporte',    collectingSince: '2026-10-08' },
+  { id: 'tvmirante',        displayName: '@tvmirante',        shortName: 'TV',       color: '#0049AF', active: true,  emProducao: false, order: 2, profile: 'viral',      collectingSince: '2026-09-29' },
   { id: 'imirantepolitica', displayName: '@imirantepolitica', shortName: 'Política', color: '#9333EA', active: true,  emProducao: false, order: 3, profile: 'editorial', collectingSince: '2026-10-01' },
+  { id: 'mirantefm',        displayName: 'Mirante FM 96,1',  shortName: 'FM 96,1', color: '#FF7401', active: true,  emProducao: false, order: 4, profile: 'radio',      collectingSince: '2026-10-05' },
 ]
 
-export const ACCOUNT_COLORS: Record<string, string> = { imirante: '#38B6FF', imiranteesporte: '#91BD32', tvmirante: '#0049AF', imirantepolitica: '#9333EA' }
-export const ACCOUNT_PAGE_TITLES: Record<string, string> = { imirante: 'Radar iMirante', imiranteesporte: 'Radar Esporte', tvmirante: 'Radar TV Mirante', imirantepolitica: 'Radar Política' }
+export const ACCOUNT_COLORS: Record<string, string> = { imirante: '#38B6FF', imiranteesporte: '#91BD32', tvmirante: '#0049AF', imirantepolitica: '#9333EA', mirantefm: '#D85587' }
+export const ACCOUNT_PAGE_TITLES: Record<string, string> = { imirante: 'Radar iMirante', imiranteesporte: 'Radar Esporte', tvmirante: 'Radar TV Mirante', imirantepolitica: 'Radar Política', mirantefm: 'Radar Mirante FM' }
 
 interface AccountContextValue {
   account: string

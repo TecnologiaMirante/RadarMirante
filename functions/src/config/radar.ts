@@ -3,11 +3,12 @@
 
 // Mapeamento estático de conta → perfil.
 // Atualizar ao adicionar novas contas em getActiveAccounts().
-export const ACCOUNT_PROFILES: Record<string, 'editorial' | 'viral' | 'politica'> = {
+export const ACCOUNT_PROFILES: Record<string, 'editorial' | 'viral' | 'politica' | 'radio' | 'esporte'> = {
   imirante:         'editorial',
   tvmirante:        'viral',
-  imiranteesporte:  'viral',
+  imiranteesporte:  'esporte',
   imirantepolitica: 'politica',
+  mirantefm:        'radio',
 }
 
 // Tetos de scoring por perfil.
@@ -15,10 +16,15 @@ export const ACCOUNT_PROFILES: Record<string, 'editorial' | 'viral' | 'politica'
 // 'viral':     conta menor, engajamento mais baixo — tetos menores = maior sensibilidade
 // 'politica':  conteúdo político — bursts rápidos, menor volume absoluto mas alta intensidade
 //              50 coment = relevante, 150+ = repercutindo, velocidade 0.8/min é alta
+// 'radio':     rádio regional — volume muito baixo, 5 coment já é relevante, 20+ é muito
+// 'esporte':   cobertura esportiva regional — torcida apaixonada, volume médio-baixo
+//              20 coment já é relevante, 50+ é alto, velocidade 0.3/min é intensa
 export const PROFILE_SCORING = {
   editorial: { commentCeiling: 300, velocityMaxPerMin: 2.0, uniqueAuthorMax: 20 },
   viral:     { commentCeiling: 75,  velocityMaxPerMin: 0.5, uniqueAuthorMax: 8  },
   politica:  { commentCeiling: 200, velocityMaxPerMin: 0.8, uniqueAuthorMax: 12 },
+  radio:     { commentCeiling: 20,  velocityMaxPerMin: 0.1, uniqueAuthorMax: 5  },
+  esporte:   { commentCeiling: 50,  velocityMaxPerMin: 0.3, uniqueAuthorMax: 7  },
 } as const
 
 export const RADAR_CONFIG = {

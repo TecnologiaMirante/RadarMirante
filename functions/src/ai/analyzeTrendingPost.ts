@@ -1,10 +1,18 @@
 import OpenAI from 'openai'
 import type { EditorialAnalysis, RadarPost, RadarSnapshot, AccountProfile } from '../types/radar'
 import { EDITORIAL_RADAR_SYSTEM_PROMPT } from './prompts/editorialRadar'
+import { VIRAL_RADAR_SYSTEM_PROMPT } from './prompts/viralRadar'
+import { ESPORTE_RADAR_SYSTEM_PROMPT } from './prompts/esporteRadar'
 import {
   EDITORIAL_ANALYSIS_JSON_SCHEMA, validateAnalysis,
 } from './schemas'
 import { sampleComments, formatCommentsForAI } from '../radar/sampling'
+
+function selectSystemPrompt(profile?: AccountProfile): string {
+  if (profile === 'esporte') return ESPORTE_RADAR_SYSTEM_PROMPT
+  if (profile === 'viral' || profile === 'radio') return VIRAL_RADAR_SYSTEM_PROMPT
+  return EDITORIAL_RADAR_SYSTEM_PROMPT
+}
 
 export interface AnalysisInput {
   post: RadarPost & { id: string }
@@ -72,7 +80,7 @@ export async function analyzeTrendingPost(
       },
     },
     messages: [
-      { role: 'system', content: EDITORIAL_RADAR_SYSTEM_PROMPT },
+      { role: 'system', content: selectSystemPrompt(input.profile) },
       { role: 'user', content: userPrompt },
     ],
     temperature: 0.3,

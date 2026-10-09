@@ -5,7 +5,7 @@ import {
   Clock, Sparkles, FileText, ChevronDown, ChevronUp,
   AlertTriangle, RefreshCw, TrendingUp, Zap,
   HelpCircle, BookOpen, ArrowUpRight, Download,
-  Instagram, ExternalLink,
+  Instagram, ExternalLink, Play,
 } from 'lucide-react'
 import { InfoTip } from '@/components/ui/InfoTip'
 import { toast } from 'sonner'
@@ -408,7 +408,7 @@ function resolveDate(publishedAt: RadarComment['publishedAt']): Date | null {
 
 function CommentsTab({ comments, loading }: { comments: RadarComment[]; loading: boolean }) {
   const [showAll, setShowAll] = useState(false)
-  const PAGE = 20
+  const PAGE = 100
   const visible = showAll ? comments : comments.slice(0, PAGE)
 
   if (loading) {
@@ -677,6 +677,126 @@ function AnalysisTab({
   )
 }
 
+// ─── Instagram Insights Card ──────────────────────────────────────────────────
+
+function fmtN(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toLocaleString('pt-BR')
+}
+
+function fmtMs(ms: number): string {
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${s % 60}s`
+}
+
+function InsightPill({ icon, value, label, color = 'text-muted-foreground' }: {
+  icon: React.ReactNode; value: string; label: string; color?: string
+}) {
+  return (
+    <div className="flex items-center gap-1.5 bg-secondary/50 rounded-lg px-3 py-2 min-w-0">
+      <span className={cn('flex-shrink-0', color)}>{icon}</span>
+      <div className="min-w-0">
+        <p className={cn('text-sm font-bold tabular-nums leading-none', color)}>{value}</p>
+        <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-none">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+function InstagramInsightsCard({ post }: { post: RadarPost }) {
+  if (post.platform !== 'instagram') return null
+  const ins = post.insights
+  if (!ins) return null
+
+  const isReel = post.url.includes('/reel/') || (ins.plays ?? 0) > 0
+  const hasData = (ins.reach ?? 0) > 0 || (ins.impressions ?? 0) > 0 ||
+                  (ins.plays ?? 0) > 0 || (ins.saved ?? 0) > 0
+
+  if (!hasData) return null
+
+  const engRate = (ins.reach ?? 0) > 0 && (ins.saved ?? 0) > 0
+    ? ((((ins.saved ?? 0) + (ins.shares ?? 0)) / (ins.reach ?? 1)) * 100).toFixed(1)
+    : null
+
+  return (
+    <Card className="border-pink-500/20 bg-gradient-to-r from-pink-500/5 to-transparent">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-md bg-gradient-to-br from-pink-500/20 to-orange-400/20 border border-pink-400/20 flex items-center justify-center flex-shrink-0">
+            <Instagram className="w-3 h-3 text-pink-400" />
+          </div>
+          <p className="text-xs font-bold text-foreground">Métricas Instagram</p>
+          {isReel && (
+            <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide bg-pink-500/15 text-pink-400 border border-pink-500/20 px-1.5 py-0.5 rounded-full ml-1">
+              <Play className="w-2 h-2 fill-current" /> Reel
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(ins.plays ?? 0) > 0 && (
+            <InsightPill
+              icon={<Play className="w-3.5 h-3.5 fill-current" />}
+              value={fmtN(ins.plays!)}
+              label="plays"
+              color="text-pink-400"
+            />
+          )}
+          {(ins.avgWatchTime ?? 0) > 0 && (
+            <InsightPill
+              icon={<Clock className="w-3.5 h-3.5" />}
+              value={fmtMs(ins.avgWatchTime!)}
+              label="tempo médio"
+              color="text-pink-300"
+            />
+          )}
+          {(ins.reach ?? 0) > 0 && (
+            <InsightPill
+              icon={<Eye className="w-3.5 h-3.5" />}
+              value={fmtN(ins.reach!)}
+              label="alcance"
+              color="text-green-400"
+            />
+          )}
+          {(ins.impressions ?? 0) > 0 && (
+            <InsightPill
+              icon={<TrendingUp className="w-3.5 h-3.5" />}
+              value={fmtN(ins.impressions!)}
+              label="impressões"
+              color="text-primary"
+            />
+          )}
+          {(ins.saved ?? 0) > 0 && (
+            <InsightPill
+              icon={<span className="text-base leading-none">★</span>}
+              value={fmtN(ins.saved!)}
+              label="salvos"
+              color="text-yellow-400"
+            />
+          )}
+          {(ins.shares ?? 0) > 0 && (
+            <InsightPill
+              icon={<Share2 className="w-3.5 h-3.5" />}
+              value={fmtN(ins.shares!)}
+              label="compartilhamentos"
+              color="text-violet-400"
+            />
+          )}
+          {engRate && (
+            <InsightPill
+              icon={<Zap className="w-3.5 h-3.5" />}
+              value={`${engRate}%`}
+              label="tx. engajamento"
+              color="text-orange-400"
+            />
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ─── Post Header ──────────────────────────────────────────────────────────────
 
 function PostHeader({ post, publishedAgo }: { post: RadarPost; publishedAgo: string }) {
@@ -919,6 +1039,7 @@ export default function PostDetails() {
         {/* ── Left: post content ── */}
         <div className="space-y-4">
           <PostHeader post={post} publishedAgo={publishedAgo} />
+          <InstagramInsightsCard post={post} />
 
           <div className="xl:hidden">
             <InstagramPreview post={post} compact />

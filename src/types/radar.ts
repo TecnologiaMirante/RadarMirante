@@ -24,6 +24,18 @@ export interface PostMetrics {
   replies?: number
 }
 
+// Métricas coletadas pela Graph API por post (Instagram)
+export interface InstagramInsights {
+  reach?: number
+  impressions?: number
+  saved?: number
+  shares?: number
+  videoViews?: number
+  plays?: number          // Reels: total de reproduções
+  avgWatchTime?: number   // Reels: tempo médio assistido em milissegundos
+  updatedAt?: Timestamp
+}
+
 export interface RadarPost {
   id: string
   externalId: string
@@ -38,6 +50,7 @@ export interface RadarPost {
   status: PostStatus
   trendScore: number
   trendConfidence: number
+  insights?: InstagramInsights
   createdAt: Timestamp
   updatedAt: Timestamp
 }
