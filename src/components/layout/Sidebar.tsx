@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Radio, Settings, ChevronLeft, ChevronRight,
-  LayoutDashboard, Sparkles, Instagram, ChevronDown,
+  LayoutDashboard, Sparkles, Instagram, ChevronDown, TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAccount } from '@/contexts/AccountContext'
+import { useAuth } from '@/hooks/useAuth'
 import imiranteLogo from '@/assets/imirante_logo.png'
 import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 import tvmiranteLogo from '@/assets/tvmirante_logo.png'
@@ -27,6 +28,7 @@ const NAV_GROUPS = [
       { to: '/radar',     icon: Radio,           label: 'Radar',         desc: 'Feed em tempo real' },
       { to: '/dashboard', icon: LayoutDashboard,  label: 'Dashboard',     desc: 'Estatísticas gerais' },
     ],
+    adminOnly: false,
   },
   {
     label: 'Conteúdo',
@@ -34,12 +36,21 @@ const NAV_GROUPS = [
       { to: '/analises',  icon: Sparkles,   label: 'Análises',      desc: 'Pautas geradas pela IA' },
       { to: '/insights',  icon: Instagram,  label: 'Insights',      desc: 'Métricas do perfil' },
     ],
+    adminOnly: false,
+  },
+  {
+    label: 'Admin',
+    items: [
+      { to: '/impacto', icon: TrendingUp, label: 'Impacto', desc: 'Antes e depois do Radar' },
+    ],
+    adminOnly: true,
   },
   {
     label: 'Sistema',
     items: [
       { to: '/settings', icon: Settings, label: 'Configurações', desc: 'Conta e preferências' },
     ],
+    adminOnly: false,
   },
 ]
 
@@ -64,6 +75,7 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(getCollapsed)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const { account, setAccount, accounts, getAccount } = useAccount()
+  const { isAdmin } = useAuth()
   const hasAccounts = accounts.length > 0
   const currentConfig = getAccount(account)
   const color = hasAccounts ? (currentConfig?.color ?? '#38B6FF') : '#6b7280'
@@ -219,7 +231,7 @@ export function Sidebar() {
 
       {/* ── Navigation ──────────────────────────────────────────── */}
       <nav className="flex-1 px-2 py-4 space-y-5 overflow-y-auto">
-        {NAV_GROUPS.map(group => (
+        {NAV_GROUPS.filter(g => !g.adminOnly || isAdmin).map(group => (
           <div key={group.label}>
             {!collapsed && (
               <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-[0.1em] px-2.5 pb-2 select-none">

@@ -14,6 +14,7 @@ const InstagramPage = lazy(() => import('@/pages/Instagram'))
 const PostDetails = lazy(() => import('@/pages/PostDetails'))
 const OpportunityDetails = lazy(() => import('@/pages/OpportunityDetails'))
 const Settings = lazy(() => import('@/pages/Settings'))
+const ImpactPage = lazy(() => import('@/pages/Impact'))
 
 function LoadingScreen() {
   return (
@@ -67,6 +68,7 @@ function AppRoutes() {
         <Route path="analises" element={<Suspense fallback={<LoadingScreen />}><AnalysesPage /></Suspense>} />
         <Route path="insights" element={<Suspense fallback={<LoadingScreen />}><InstagramPage /></Suspense>} />
         <Route path="settings" element={<Suspense fallback={<LoadingScreen />}><Settings /></Suspense>} />
+        <Route path="impacto" element={<Suspense fallback={<LoadingScreen />}><ImpactPage /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/radar" replace />} />
     </Routes>

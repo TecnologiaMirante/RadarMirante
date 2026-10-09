@@ -217,6 +217,16 @@ service cloud.firestore {
       allow delete: if isCurrentUserAdmin() && resource.data.status == 'pending';
     }
 
+    // ─── Performance Snapshots (Impacto do Radar) ────────────────────────────
+
+    match /performanceSnapshots/{snapshotId} {
+      allow read: if isCurrentUserAdmin();
+      allow create: if isCurrentUserAdmin() &&
+        request.resource.data.capturedBy == request.auth.uid &&
+        request.resource.data.keys().hasAll(['capturedAt', 'capturedBy', 'capturedByEmail', 'note', 'accounts']);
+      allow update, delete: if false;
+    }
+
     // ─── System Health ────────────────────────────────────────────────────────
 
     match /systemHealth/{docId} {
