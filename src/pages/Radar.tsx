@@ -3,7 +3,9 @@ import {
   Radio, RefreshCw, MessageCircle, LayoutGrid, List,
   TrendingUp, FileText, Activity, Search, X,
   Heart, Eye, Zap, Award, Clock, ArrowUpRight, Maximize2, Play,
+  Download,
 } from 'lucide-react'
+import { exportCsv, exportXlsx } from '@/utils/exportData'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -217,6 +219,41 @@ export default function Radar() {
   const candidatePosts  = useMemo(() => posts.filter(p => p.status === 'candidate'),  [posts])
   const monitoringPosts = useMemo(() => posts.filter(p => p.status === 'monitoring'), [posts])
   const analyzedPosts   = useMemo(() => posts.filter(p => p.status === 'analyzed' || p.status === 'trending'), [posts])
+
+  function buildPostRows(postList: typeof posts) {
+    const fmtTs = (ts: unknown) => {
+      try { return (ts as import('firebase/firestore').Timestamp).toDate().toLocaleString('pt-BR') } catch { return '' }
+    }
+    const statusLabel: Record<string, string> = {
+      trending: 'Repercutindo', candidate: 'Aquecendo',
+      monitoring: 'Monitorando', analyzed: 'Analisado', archived: 'Arquivado',
+    }
+    return postList.map(p => ({
+      'Publicação': p.text.slice(0, 200),
+      'Tendência': statusLabel[p.status] ?? p.status,
+      'Score': p.trendScore,
+      'Comentários': p.metrics.comments,
+      'Likes': p.metrics.likes,
+      'Shares': p.metrics.shares,
+      'Views': p.metrics.views ?? '',
+      'Plataforma': p.platform,
+      'Publicado em': fmtTs(p.publishedAt),
+      'URL': p.url,
+    }))
+  }
+
+  const POST_EXPORT_HEADERS = ['Publicação','Tendência','Score','Comentários','Likes','Shares','Views','Plataforma','Publicado em','URL']
+
+  function handleExportPostsCsv() {
+    const rows = buildPostRows(filteredPosts)
+    const now = new Date().toISOString().slice(0,10)
+    exportCsv(rows, POST_EXPORT_HEADERS, `radar-publicacoes-${now}.csv`)
+  }
+  function handleExportPostsXlsx() {
+    const rows = buildPostRows(filteredPosts)
+    const now = new Date().toISOString().slice(0,10)
+    exportXlsx(rows, POST_EXPORT_HEADERS, `radar-publicacoes-${now}.xlsx`, 'Publicações')
+  }
 
   const totalComments = useMemo(() => posts.reduce((s, p) => s + p.metrics.comments, 0), [posts])
   const totalLikes    = useMemo(() => posts.reduce((s, p) => s + p.metrics.likes, 0), [posts])
@@ -605,6 +642,26 @@ export default function Radar() {
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
+                {/* Export */}
+                {filteredPosts.length > 0 && (
+                  <div className="relative group">
+                    <button
+                      className="flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                      title={`Exportar ${filteredPosts.length} publicações`}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Export</span>
+                    </button>
+                    <div className="absolute right-0 top-full mt-1 z-30 hidden group-hover:flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[120px]">
+                      <button onClick={handleExportPostsCsv} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors whitespace-nowrap">
+                        ↓ CSV
+                      </button>
+                      <button onClick={handleExportPostsXlsx} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors border-t border-border/50 whitespace-nowrap">
+                        ↓ Excel (.xlsx)
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {/* Visualização */}
                 <div className="flex items-center border border-border rounded-md overflow-hidden">
                   <button onClick={() => setView('list')} title="Lista"

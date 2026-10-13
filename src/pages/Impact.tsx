@@ -10,7 +10,7 @@ import {
   Camera, ChevronDown, ChevronUp, ExternalLink, TrendingUp,
   Users, Zap, CheckCircle, ArrowUpRight, ArrowDownRight,
   Flag, Clock, Target, BarChart2, Flame, Star, RefreshCw,
-  CalendarDays, Bot, Hand,
+  CalendarDays, Bot, Hand, Download, GitCompare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -18,6 +18,7 @@ import { useAccount } from '@/contexts/AccountContext'
 import { captureSnapshot, getSnapshots } from '@/services/snapshots'
 import type { PerformanceSnapshot, AccountSnapshot } from '@/types/snapshot'
 import type { Timestamp } from 'firebase/firestore'
+import { exportCsv, exportXlsx } from '@/utils/exportData'
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -192,6 +193,13 @@ export default function ImpactPage() {
   const [evolutionMetric, setEvolutionMetric] = useState('viralRate')
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set())
 
+  // Comparação de períodos
+  const [periodMode, setPeriodMode] = useState(false)
+  const [periodAStartId, setPeriodAStartId] = useState<string | null>(null)
+  const [periodAEndId,   setPeriodAEndId]   = useState<string | null>(null)
+  const [periodBStartId, setPeriodBStartId] = useState<string | null>(null)
+  const [periodBEndId,   setPeriodBEndId]   = useState<string | null>(null)
+
   useEffect(() => {
     getSnapshots()
       .then(snaps => {
@@ -263,6 +271,123 @@ export default function ImpactPage() {
   }
 
   const activePeriodPreset = getActivePeriodPreset()
+
+  // ── Period comparison ─────────────────────────────────────────────────────
+  const periodAStart = snapshots.find(s => s.id === periodAStartId) ?? null
+  const periodAEnd   = snapshots.find(s => s.id === periodAEndId)   ?? null
+  const periodBStart = snapshots.find(s => s.id === periodBStartId) ?? null
+  const periodBEnd   = snapshots.find(s => s.id === periodBEndId)   ?? null
+
+  function togglePeriodMode() {
+    if (!periodMode && snapshots.length >= 2) {
+      // Auto-fill sensible defaults
+      const latest = snapshots[0]
+      const oldest = snapshots[snapshots.length - 1]
+      const mid = snapshots[Math.floor(snapshots.length / 2)] ?? snapshots[1]
+      setPeriodAStartId(oldest.id)
+      setPeriodAEndId(mid.id)
+      setPeriodBStartId(mid.id)
+      setPeriodBEndId(latest.id)
+    }
+    setPeriodMode(v => !v)
+  }
+
+  interface PeriodMetrics {
+    followers: number; viralPosts: number; opportunities: number; avgViralRate: number
+    engagementRate: number; consistencyScore: number
+  }
+
+  function computePeriodDelta(
+    startSnap: PerformanceSnapshot | null,
+    endSnap: PerformanceSnapshot | null,
+  ): PeriodMetrics | null {
+    if (!startSnap || !endSnap) return null
+    const startAccs = filteredAccounts.map(a => startSnap.accounts[a.id]).filter(Boolean)
+    const endAccs   = filteredAccounts.map(a => endSnap.accounts[a.id]).filter(Boolean)
+    if (!startAccs.length || !endAccs.length) return null
+    const sumField = (accs: AccountSnapshot[], key: keyof AccountSnapshot) =>
+      accs.reduce((s, a) => s + (typeof a[key] === 'number' ? (a[key] as number) : 0), 0)
+    const avg = (accs: AccountSnapshot[], key: keyof AccountSnapshot) =>
+      accs.length ? sumField(accs, key) / accs.length : 0
+    return {
+      followers:      sumField(endAccs, 'followersCount')    - sumField(startAccs, 'followersCount'),
+      viralPosts:     sumField(endAccs, 'viralPostsCount')   - sumField(startAccs, 'viralPostsCount'),
+      opportunities:  sumField(endAccs, 'totalOpportunities')- sumField(startAccs, 'totalOpportunities'),
+      avgViralRate:   avg(endAccs, 'viralRate')               - avg(startAccs, 'viralRate'),
+      engagementRate: avg(endAccs, 'engagementRate30d')       - avg(startAccs, 'engagementRate30d'),
+      consistencyScore: avg(endAccs, 'consistencyScore')      - avg(startAccs, 'consistencyScore'),
+    }
+  }
+
+  const deltaA = useMemo(() => computePeriodDelta(periodAStart, periodAEnd), [periodAStart, periodAEnd, filteredAccounts])
+  const deltaB = useMemo(() => computePeriodDelta(periodBStart, periodBEnd), [periodBStart, periodBEnd, filteredAccounts])
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  function buildComparisonRows() {
+    if (!viewSnap) return []
+    return filteredAccounts.flatMap(acc => {
+      const a = viewSnap.accounts[acc.id]
+      const b = baselineSnap?.accounts[acc.id]
+      if (!a) return []
+      const delta = (v: number, bv?: number) => bv != null ? v - bv : ''
+      return [{
+        'Conta': acc.displayName,
+        'Snapshot (atual)': fmtDateTime(viewSnap.capturedAt),
+        'Snapshot (baseline)': baselineSnap ? fmtDateTime(baselineSnap.capturedAt) : '',
+        'Seguidores': a.followersCount,
+        'Seguidores Δ': delta(a.followersCount, b?.followersCount),
+        'Taxa viral (%)': +a.viralRate.toFixed(2),
+        'Taxa viral Δ': b ? +(a.viralRate - b.viralRate).toFixed(2) : '',
+        'Posts virais': a.viralPostsCount,
+        'Posts virais Δ': delta(a.viralPostsCount, b?.viralPostsCount),
+        'Engajamento 30d (%)': +a.engagementRate30d.toFixed(2),
+        'Engajamento Δ': b ? +(a.engagementRate30d - b.engagementRate30d).toFixed(2) : '',
+        'Oportunidades': a.totalOpportunities,
+        'Oportunidades Δ': delta(a.totalOpportunities, b?.totalOpportunities),
+        'Consistência (%)': a.consistencyScore ?? '',
+        'Consistência Δ': b?.consistencyScore != null && a.consistencyScore != null
+          ? +(a.consistencyScore - b.consistencyScore).toFixed(1) : '',
+        'Posts monitorados': a.totalPostsMonitored,
+        'Curtidas total': a.totalLikes,
+        'Comentários total': a.totalComments,
+        'Alcance 30d': a.reach30d,
+      }]
+    })
+  }
+
+  function buildHistoryRows() {
+    return snapshots.flatMap(snap =>
+      filteredAccounts.flatMap(acc => {
+        const a = snap.accounts[acc.id]
+        if (!a) return []
+        return [{
+          'Data captura': fmtDateTime(snap.capturedAt),
+          'Tipo': snap.type === 'auto' ? 'Auto' : 'Manual',
+          'Nota': snap.note,
+          'Conta': acc.displayName,
+          'Seguidores': a.followersCount,
+          'Taxa viral (%)': +a.viralRate.toFixed(2),
+          'Posts virais': a.viralPostsCount,
+          'Engajamento 30d (%)': +a.engagementRate30d.toFixed(2),
+          'Oportunidades': a.totalOpportunities,
+          'Consistência (%)': a.consistencyScore ?? '',
+          'Posts monitorados': a.totalPostsMonitored,
+          'Alcance 30d': a.reach30d,
+          'Curtidas total': a.totalLikes,
+          'Comentários total': a.totalComments,
+        }]
+      })
+    )
+  }
+
+  const COMP_HEADERS = ['Conta','Snapshot (atual)','Snapshot (baseline)','Seguidores','Seguidores Δ','Taxa viral (%)','Taxa viral Δ','Posts virais','Posts virais Δ','Engajamento 30d (%)','Engajamento Δ','Oportunidades','Oportunidades Δ','Consistência (%)','Consistência Δ','Posts monitorados','Curtidas total','Comentários total','Alcance 30d']
+  const HIST_HEADERS = ['Data captura','Tipo','Nota','Conta','Seguidores','Taxa viral (%)','Posts virais','Engajamento 30d (%)','Oportunidades','Consistência (%)','Posts monitorados','Alcance 30d','Curtidas total','Comentários total']
+
+  function handleExportComparativoCsv()  { exportCsv(buildComparisonRows(),  COMP_HEADERS, `impacto-comparativo-${new Date().toISOString().slice(0,10)}.csv`) }
+  function handleExportComparativoXlsx() { exportXlsx(buildComparisonRows(), COMP_HEADERS, `impacto-comparativo-${new Date().toISOString().slice(0,10)}.xlsx`, 'Comparativo') }
+  function handleExportHistoricoCsv()    { exportCsv(buildHistoryRows(),     HIST_HEADERS, `impacto-historico-${new Date().toISOString().slice(0,10)}.csv`) }
+  function handleExportHistoricoXlsx()   { exportXlsx(buildHistoryRows(),    HIST_HEADERS, `impacto-historico-${new Date().toISOString().slice(0,10)}.xlsx`, 'Histórico') }
+
 
   async function handleCapture() {
     if (!user) return
@@ -448,13 +573,45 @@ export default function ImpactPage() {
               Capturas manuais e automáticas — compare contas entre si ou ao longo do tempo
             </p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
-          >
-            <Camera className="w-4 h-4" />
-            Nova captura
-          </button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {snapshots.length > 0 && (
+              <div className="relative group">
+                <button className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors">
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline text-xs">Export</span>
+                </button>
+                <div className="absolute right-0 top-full mt-1 z-30 hidden group-hover:flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[170px]">
+                  <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Comparativo atual</p>
+                  <button onClick={handleExportComparativoCsv}  className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ CSV</button>
+                  <button onClick={handleExportComparativoXlsx} className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors border-b border-border/40">↓ Excel (.xlsx)</button>
+                  <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Histórico completo</p>
+                  <button onClick={handleExportHistoricoCsv}    className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ CSV</button>
+                  <button onClick={handleExportHistoricoXlsx}   className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ Excel (.xlsx)</button>
+                </div>
+              </div>
+            )}
+            {snapshots.length >= 3 && (
+              <button
+                onClick={togglePeriodMode}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors',
+                  periodMode
+                    ? 'bg-purple-500/10 border-purple-500/50 text-purple-500'
+                    : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/50',
+                )}
+              >
+                <GitCompare className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">Comparar períodos</span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
+            >
+              <Camera className="w-4 h-4" />
+              Nova captura
+            </button>
+          </div>
         </div>
 
         {/* Modal */}
@@ -603,6 +760,131 @@ export default function ImpactPage() {
                 </div>
               )}
             </div>
+
+            {/* ── Comparação de períodos ─────────────────────────── */}
+            {periodMode && snapshots.length >= 3 && (
+              <div className="bg-card border border-purple-500/30 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <GitCompare className="w-4 h-4 text-purple-500" />
+                  <p className="text-sm font-semibold text-purple-400">Comparação de períodos</p>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    Compara o crescimento de dois intervalos de tempo diferentes
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Período A */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest">Período A</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Início</p>
+                        <select value={periodAStartId ?? ''} onChange={e => setPeriodAStartId(e.target.value)}
+                          className="w-full bg-background border border-blue-500/30 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                          {snapshots.map(s => <option key={s.id} value={s.id}>{fmtDate(s.capturedAt)} — {s.note?.slice(0,20) || 'Sem nota'}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Fim</p>
+                        <select value={periodAEndId ?? ''} onChange={e => setPeriodAEndId(e.target.value)}
+                          className="w-full bg-background border border-blue-500/30 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                          {snapshots.map(s => <option key={s.id} value={s.id}>{fmtDate(s.capturedAt)} — {s.note?.slice(0,20) || 'Sem nota'}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {periodAStart && periodAEnd && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {Math.abs(Math.round((periodAEnd.capturedAt.toMillis() - periodAStart.capturedAt.toMillis()) / (1000*60*60*24)))} dias
+                        · {fmtDate(periodAStart.capturedAt)} → {fmtDate(periodAEnd.capturedAt)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Período B */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-purple-400/80 uppercase tracking-widest">Período B</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Início</p>
+                        <select value={periodBStartId ?? ''} onChange={e => setPeriodBStartId(e.target.value)}
+                          className="w-full bg-background border border-purple-500/30 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30">
+                          {snapshots.map(s => <option key={s.id} value={s.id}>{fmtDate(s.capturedAt)} — {s.note?.slice(0,20) || 'Sem nota'}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Fim</p>
+                        <select value={periodBEndId ?? ''} onChange={e => setPeriodBEndId(e.target.value)}
+                          className="w-full bg-background border border-purple-500/30 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30">
+                          {snapshots.map(s => <option key={s.id} value={s.id}>{fmtDate(s.capturedAt)} — {s.note?.slice(0,20) || 'Sem nota'}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {periodBStart && periodBEnd && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {Math.abs(Math.round((periodBEnd.capturedAt.toMillis() - periodBStart.capturedAt.toMillis()) / (1000*60*60*24)))} dias
+                        · {fmtDate(periodBStart.capturedAt)} → {fmtDate(periodBEnd.capturedAt)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Resultado da comparação */}
+                {deltaA && deltaB && (
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">Crescimento por período</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-muted-foreground border-b border-border/30">
+                            <th className="text-left py-1.5 pr-4 font-medium">Métrica</th>
+                            <th className="text-right py-1.5 px-3 font-medium text-blue-400">Período A Δ</th>
+                            <th className="text-right py-1.5 px-3 font-medium text-purple-400">Período B Δ</th>
+                            <th className="text-right py-1.5 pl-3 font-medium text-muted-foreground">B melhor que A?</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {([
+                            { l: 'Seguidores',        a: deltaA.followers,        b: deltaB.followers,        fmt: fmtNum },
+                            { l: 'Taxa viral',        a: deltaA.avgViralRate,     b: deltaB.avgViralRate,     fmt: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp` },
+                            { l: 'Posts virais',      a: deltaA.viralPosts,       b: deltaB.viralPosts,       fmt: fmtNum },
+                            { l: 'Oportunidades',     a: deltaA.opportunities,    b: deltaB.opportunities,    fmt: fmtNum },
+                            { l: 'Engajamento 30d',   a: deltaA.engagementRate,   b: deltaB.engagementRate,   fmt: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}pp` },
+                            { l: 'Consistência',      a: deltaA.consistencyScore, b: deltaB.consistencyScore, fmt: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp` },
+                          ] as { l: string; a: number; b: number; fmt: (v: number) => string }[]).map(row => {
+                            const bBetter = row.b > row.a
+                            const equal = Math.abs(row.b - row.a) < 0.01
+                            return (
+                              <tr key={row.l} className="border-b border-border/20">
+                                <td className="py-2 pr-4 font-medium">{row.l}</td>
+                                <td className={cn('text-right px-3 tabular-nums', row.a > 0 ? 'text-blue-400' : row.a < 0 ? 'text-red-400' : 'text-muted-foreground')}>
+                                  {row.a > 0 ? '+' : ''}{row.fmt(row.a)}
+                                </td>
+                                <td className={cn('text-right px-3 tabular-nums', row.b > 0 ? 'text-purple-400' : row.b < 0 ? 'text-red-400' : 'text-muted-foreground')}>
+                                  {row.b > 0 ? '+' : ''}{row.fmt(row.b)}
+                                </td>
+                                <td className="text-right pl-3">
+                                  {equal ? <span className="text-muted-foreground/50">—</span>
+                                    : bBetter
+                                      ? <span className="text-emerald-500 font-bold">B ▲</span>
+                                      : <span className="text-amber-500 font-bold">A ▲</span>
+                                  }
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {(!deltaA || !deltaB) && periodAStartId && periodAEndId && periodBStartId && periodBEndId && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    Selecione snapshots válidos para ver a comparação
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Headline */}
             {headline && (
