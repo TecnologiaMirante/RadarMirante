@@ -6,6 +6,7 @@ import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/fire
 import { defineSecret } from 'firebase-functions/params'
 import { monitorActivePosts } from './scheduled/monitorPosts'
 import { syncInstagramInsights } from './scheduled/syncInstagramInsights'
+import { captureWeeklySnapshot } from './scheduled/captureWeeklySnapshot'
 import { analyzeTrendingPost } from './ai/analyzeTrendingPost'
 import { createOrUpdateOpportunity } from './radar/opportunity'
 import { getSnapshotHistory } from './radar/snapshots'
@@ -451,6 +452,49 @@ export const processAnalysisRequest = onDocumentCreated(
       await runRef.update({ status: 'failed', error: errMsg, finishedAt: admin.firestore.FieldValue.serverTimestamp() })
       await requestRef.update({ status: 'failed', error: errMsg, updatedAt: admin.firestore.FieldValue.serverTimestamp() })
       console.error('[processAnalysisRequest] Erro:', err)
+    }
+  },
+)
+
+// ─── Captura semanal automática de performance ───────────────────────────────
+
+// Roda todo domingo às 03:00 (horário de Brasília).
+// Primeiras 4 semanas: comparar semana x semana.
+// A partir de 28 dias de histórico: comparar mês x mês.
+// A lógica de comparação fica na UI — aqui só capturamos o snapshot.
+export const weeklyPerformanceSnapshot = onSchedule(
+  {
+    schedule: '0 3 * * 0',
+    timeZone: 'America/Sao_Paulo',
+    retryCount: 1,
+    region: 'southamerica-east1',
+    timeoutSeconds: 540,
+    memory: '1GiB',
+  },
+  async () => {
+    console.log('[weeklyPerformanceSnapshot] Iniciando')
+    const start = Date.now()
+    try {
+      await captureWeeklySnapshot(db)
+      await db.collection('systemHealth').doc('weeklySnapshot').set({
+        lastRun: admin.firestore.FieldValue.serverTimestamp(),
+        lastStatus: 'success',
+        lastDurationMs: Date.now() - start,
+        consecutiveErrors: 0,
+        lastError: null,
+        runCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true })
+    } catch (err) {
+      await db.collection('systemHealth').doc('weeklySnapshot').set({
+        lastRun: admin.firestore.FieldValue.serverTimestamp(),
+        lastStatus: 'error',
+        lastDurationMs: Date.now() - start,
+        lastError: err instanceof Error ? err.message : String(err),
+        consecutiveErrors: admin.firestore.FieldValue.increment(1),
+        runCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true })
+      console.error('[weeklyPerformanceSnapshot] Erro:', err)
+      throw err
     }
   },
 )

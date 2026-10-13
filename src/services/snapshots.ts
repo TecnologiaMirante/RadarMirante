@@ -118,7 +118,8 @@ async function captureAccountSnapshot(
   if (account.collectingSince) {
     const startMs = new Date(account.collectingSince).getTime()
     const totalMs = capturedAt.getTime() - startMs
-    weeksMonitored = Math.max(1, Math.floor(totalMs / (7 * 24 * 60 * 60 * 1000)))
+    // +1 porque o bucket da semana atual também conta
+    weeksMonitored = Math.floor(totalMs / (7 * 24 * 60 * 60 * 1000)) + 1
     if (viralPosts.length > 0) {
       const weeksWithViral = new Set<number>()
       for (const post of viralPosts) {
@@ -127,16 +128,22 @@ async function captureAccountSnapshot(
           weeksWithViral.add(Math.floor((ms - startMs) / (7 * 24 * 60 * 60 * 1000)))
         }
       }
-      consistencyScore = Math.round((weeksWithViral.size / weeksMonitored) * 100)
+      consistencyScore = Math.min(100, Math.round((weeksWithViral.size / weeksMonitored) * 100))
     } else {
       consistencyScore = 0
     }
   }
 
-  // Temas
+  // Temas — usa clusters (categorias) em vez de mainTopic (título livre)
   const topicCounts: Record<string, number> = {}
   for (const opp of opportunities) {
-    if (opp.mainTopic) topicCounts[opp.mainTopic] = (topicCounts[opp.mainTopic] ?? 0) + 1
+    if (opp.clusters && opp.clusters.length > 0) {
+      for (const cluster of opp.clusters) {
+        if (cluster.topic) topicCounts[cluster.topic] = (topicCounts[cluster.topic] ?? 0) + 1
+      }
+    } else if (opp.mainTopic) {
+      topicCounts[opp.mainTopic] = (topicCounts[opp.mainTopic] ?? 0) + 1
+    }
   }
   const topTopics: TopicCount[] = Object.entries(topicCounts)
     .sort((a, b) => b[1] - a[1])
@@ -218,6 +225,7 @@ export async function captureSnapshot(
     capturedBy: user.uid,
     capturedByEmail: user.email ?? '',
     note,
+    type: 'manual' as const,
     accounts: accountsMap,
   })
 

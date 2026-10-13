@@ -72,5 +72,6 @@ export interface PerformanceSnapshot {
   capturedBy: string
   capturedByEmail: string
   note: string
+  type?: 'auto' | 'manual'
   accounts: Record<string, AccountSnapshot>
 }
