@@ -227,10 +227,52 @@ export const onUserDocUpdated = onDocumentUpdated(
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 
+type CheckStatus = 'healthy' | 'degraded' | 'unhealthy'
+interface CheckResult { status: CheckStatus; responseTimeMs: number; message?: string }
+
+async function checkFirestore(): Promise<CheckResult> {
+  const t0 = Date.now()
+  try {
+    await db.collection('systemHealth').doc('healthProbe').set(
+      { lastCheck: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true },
+    )
+    const ms = Date.now() - t0
+    return { status: ms < 2000 ? 'healthy' : 'degraded', responseTimeMs: ms }
+  } catch (e) {
+    return { status: 'unhealthy', responseTimeMs: Date.now() - t0, message: String(e) }
+  }
+}
+
+async function checkStorage(): Promise<CheckResult> {
+  const t0 = Date.now()
+  try {
+    const bucket = admin.storage().bucket()
+    await bucket.exists()
+    const ms = Date.now() - t0
+    return { status: ms < 3000 ? 'healthy' : 'degraded', responseTimeMs: ms }
+  } catch (e) {
+    return { status: 'unhealthy', responseTimeMs: Date.now() - t0, message: String(e) }
+  }
+}
+
 export const healthCheck = onRequest(
-  { cors: false, region: 'southamerica-east1' },
-  (_req, res) => {
-    res.json({ status: 'ok', version: '0.1.0', timestamp: new Date().toISOString() })
+  { cors: false, region: 'southamerica-east1', timeoutSeconds: 10 },
+  async (_req, res) => {
+    const [database, storage] = await Promise.all([checkFirestore(), checkStorage()])
+
+    const statuses: CheckStatus[] = [database.status, storage.status]
+    const overall: CheckStatus =
+      statuses.every(s => s === 'healthy') ? 'healthy' :
+      statuses.some(s => s === 'unhealthy') ? 'unhealthy' :
+      'degraded'
+
+    res.status(overall === 'unhealthy' ? 503 : 200).json({
+      status: overall,
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      checks: { database, storage },
+    })
   },
 )
 
