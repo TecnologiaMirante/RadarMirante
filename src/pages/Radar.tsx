@@ -185,7 +185,7 @@ export default function Radar() {
   const [contentTab, setContentTab] = useState<ContentTab>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [exportOpen, setExportOpen] = useState(false)
+  const [exportModal, setExportModal] = useState(false)
   const PAGE_SIZE = 30
   const [lastMonitorRun, setLastMonitorRun] = useState<Date | null>(null)
 
@@ -433,8 +433,79 @@ export default function Radar() {
     )
   }
 
+  const tabLabel: Record<ContentTab, string> = {
+    all: 'Tudo', trending: 'Repercutindo', candidate: 'Aquecendo', analyzed: 'Analisado',
+  }
+  const dateLabel = getPresetLabel(filters.time, filters.customFrom, filters.customTo, overrideAllLabel)
+
   return (
     <div className="space-y-4">
+
+      {/* Modal de confirmação de export */}
+      {exportModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={e => { if (e.target === e.currentTarget) setExportModal(false) }}
+        >
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl space-y-4">
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-bold">Exportar publicações</h2>
+            </div>
+
+            {/* Resumo do que vai sair */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between py-1.5 border-b border-border/40">
+                <span className="text-muted-foreground">Perfil</span>
+                <span className="font-semibold">{pageTitle}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-border/40">
+                <span className="text-muted-foreground">Período</span>
+                <span className="font-semibold">{dateLabel}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-border/40">
+                <span className="text-muted-foreground">Status</span>
+                <span className="font-semibold">{tabLabel[contentTab]}</span>
+              </div>
+              {search.trim() && (
+                <div className="flex items-center justify-between py-1.5 border-b border-border/40">
+                  <span className="text-muted-foreground">Busca</span>
+                  <span className="font-semibold truncate max-w-[160px]">"{search.trim()}"</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-muted-foreground">Total de linhas</span>
+                <span className="font-bold text-primary">{filteredPosts.length} publicações</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground/60">
+              Para alterar os dados exportados, feche este modal e ajuste os filtros na tela.
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setExportModal(false)}
+                className="flex-1 px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { handleExportPostsCsv(); setExportModal(false) }}
+                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-accent transition-colors"
+              >
+                ↓ CSV
+              </button>
+              <button
+                onClick={() => { handleExportPostsXlsx(); setExportModal(false) }}
+                className="flex-1 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+              >
+                ↓ Excel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
@@ -643,34 +714,15 @@ export default function Radar() {
                 </select>
                 {/* Export */}
                 {filteredPosts.length > 0 && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setExportOpen(v => !v)}
-                      className={cn(
-                        'flex items-center gap-1 h-7 px-2 rounded-md border bg-card text-xs transition-colors',
-                        exportOpen
-                          ? 'border-primary/60 text-foreground'
-                          : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/50',
-                      )}
-                      title={`Exportar ${filteredPosts.length} publicações`}
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Export</span>
-                    </button>
-                    {exportOpen && (
-                      <>
-                        <div className="fixed inset-0 z-20" onClick={() => setExportOpen(false)} />
-                        <div className="absolute right-0 top-full mt-1 z-30 flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[140px]">
-                          <button onClick={() => { handleExportPostsCsv(); setExportOpen(false) }} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors whitespace-nowrap">
-                            ↓ CSV
-                          </button>
-                          <button onClick={() => { handleExportPostsXlsx(); setExportOpen(false) }} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors border-t border-border/50 whitespace-nowrap">
-                            ↓ Excel (.xlsx)
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => setExportModal(true)}
+                    className="flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Export</span>
+                    <span className="hidden sm:inline text-muted-foreground/50">·</span>
+                    <span className="hidden sm:inline font-semibold">{filteredPosts.length}</span>
+                  </button>
                 )}
                 {/* Visualização */}
                 <div className="flex items-center border border-border rounded-md overflow-hidden">
