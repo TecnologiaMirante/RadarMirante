@@ -826,7 +826,7 @@ function PostHeader({ post, publishedAgo }: { post: RadarPost; publishedAgo: str
 
         {/* Post text */}
         {post.text && (
-          <p className="text-sm text-foreground leading-relaxed line-clamp-5 border-l-2 border-border/60 pl-3">
+          <p className="text-sm text-foreground leading-relaxed border-l-2 border-border/60 pl-3 whitespace-pre-wrap">
             {post.text}
           </p>
         )}

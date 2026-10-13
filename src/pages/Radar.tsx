@@ -186,6 +186,7 @@ export default function Radar() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [exportModal, setExportModal] = useState(false)
+  const [exportSnapshot, setExportSnapshot] = useState<typeof posts>([])
   const PAGE_SIZE = 30
   const [lastMonitorRun, setLastMonitorRun] = useState<Date | null>(null)
 
@@ -231,7 +232,7 @@ export default function Radar() {
     }
     return postList.map(p => ({
       'Perfil': pageTitle,
-      'Publicação': p.text.slice(0, 200),
+      'Publicação': p.text,
       'Tendência': statusLabel[p.status] ?? p.status,
       'Score': p.trendScore,
       'Comentários': p.metrics.comments,
@@ -243,13 +244,18 @@ export default function Radar() {
 
   const POST_EXPORT_HEADERS = ['Perfil','Publicação','Tendência','Score','Comentários','Likes','Publicado em','URL']
 
+  function openExportModal() {
+    setExportSnapshot([...filteredPosts])
+    setExportModal(true)
+  }
+
   function handleExportPostsCsv() {
-    const rows = buildPostRows(filteredPosts)
+    const rows = buildPostRows(exportSnapshot)
     const now = new Date().toISOString().slice(0,10)
     exportCsv(rows, POST_EXPORT_HEADERS, `radar-${account}-${now}.csv`)
   }
   function handleExportPostsXlsx() {
-    const rows = buildPostRows(filteredPosts)
+    const rows = buildPostRows(exportSnapshot)
     const now = new Date().toISOString().slice(0,10)
     exportXlsx(rows, POST_EXPORT_HEADERS, `radar-${account}-${now}.xlsx`, 'Publicações')
   }
@@ -475,7 +481,7 @@ export default function Radar() {
               )}
               <div className="flex items-center justify-between py-1.5">
                 <span className="text-muted-foreground">Total de linhas</span>
-                <span className="font-bold text-primary">{filteredPosts.length} publicações</span>
+                <span className="font-bold text-primary">{exportSnapshot.length} publicações</span>
               </div>
             </div>
 
@@ -715,7 +721,7 @@ export default function Radar() {
                 {/* Export */}
                 {filteredPosts.length > 0 && (
                   <button
-                    onClick={() => setExportModal(true)}
+                    onClick={() => openExportModal()}
                     className="flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
