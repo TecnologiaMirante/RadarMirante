@@ -326,31 +326,33 @@ export default function ImpactPage() {
   // ── Export ────────────────────────────────────────────────────────────────
   function buildComparisonRows() {
     if (!viewSnap) return []
+    const sameSnap = viewSnap.id === baselineSnap?.id
     return filteredAccounts.flatMap(acc => {
       const a = viewSnap.accounts[acc.id]
-      const b = baselineSnap?.accounts[acc.id]
+      const b = sameSnap ? undefined : baselineSnap?.accounts[acc.id]
       if (!a) return []
-      const delta = (v: number, bv?: number) => bv != null ? v - bv : ''
+      const diff = (v: number, bv?: number) => bv != null ? +(v - bv).toFixed(2) : 'N/A (mesmo snapshot)'
+      const diffPct = (v: number, bv?: number) => bv != null ? +(v - bv).toFixed(2) : 'N/A (mesmo snapshot)'
       return [{
         'Conta': acc.displayName,
-        'Snapshot (atual)': fmtDateTime(viewSnap.capturedAt),
-        'Snapshot (baseline)': baselineSnap ? fmtDateTime(baselineSnap.capturedAt) : '',
+        'Data (atual)': fmtDateTime(viewSnap.capturedAt),
+        'Data (baseline)': baselineSnap && !sameSnap ? fmtDateTime(baselineSnap.capturedAt) : '— mesmo snapshot',
         'Seguidores': a.followersCount,
-        'Seguidores Δ': delta(a.followersCount, b?.followersCount),
+        'Seguidores (variação)': diff(a.followersCount, b?.followersCount),
         'Taxa viral (%)': +a.viralRate.toFixed(2),
-        'Taxa viral Δ': b ? +(a.viralRate - b.viralRate).toFixed(2) : '',
+        'Taxa viral (variação pp)': diffPct(a.viralRate, b?.viralRate),
         'Posts virais': a.viralPostsCount,
-        'Posts virais Δ': delta(a.viralPostsCount, b?.viralPostsCount),
+        'Posts virais (variação)': diff(a.viralPostsCount, b?.viralPostsCount),
         'Engajamento 30d (%)': +a.engagementRate30d.toFixed(2),
-        'Engajamento Δ': b ? +(a.engagementRate30d - b.engagementRate30d).toFixed(2) : '',
-        'Oportunidades': a.totalOpportunities,
-        'Oportunidades Δ': delta(a.totalOpportunities, b?.totalOpportunities),
+        'Engajamento (variação pp)': diffPct(a.engagementRate30d, b?.engagementRate30d),
+        'Oportunidades IA': a.totalOpportunities,
+        'Oportunidades (variação)': diff(a.totalOpportunities, b?.totalOpportunities),
         'Consistência (%)': a.consistencyScore ?? '',
-        'Consistência Δ': b?.consistencyScore != null && a.consistencyScore != null
-          ? +(a.consistencyScore - b.consistencyScore).toFixed(1) : '',
+        'Consistência (variação pp)': a.consistencyScore != null
+          ? diffPct(a.consistencyScore, b?.consistencyScore ?? undefined) : 'N/A',
         'Posts monitorados': a.totalPostsMonitored,
-        'Curtidas total': a.totalLikes,
-        'Comentários total': a.totalComments,
+        'Curtidas': a.totalLikes,
+        'Comentários': a.totalComments,
         'Alcance 30d': a.reach30d,
       }]
     })
@@ -363,26 +365,26 @@ export default function ImpactPage() {
         if (!a) return []
         return [{
           'Data captura': fmtDateTime(snap.capturedAt),
-          'Tipo': snap.type === 'auto' ? 'Auto' : 'Manual',
-          'Nota': snap.note,
+          'Tipo captura': snap.type === 'auto' ? 'Automática' : 'Manual',
+          'Nota': snap.note || '',
           'Conta': acc.displayName,
           'Seguidores': a.followersCount,
           'Taxa viral (%)': +a.viralRate.toFixed(2),
           'Posts virais': a.viralPostsCount,
           'Engajamento 30d (%)': +a.engagementRate30d.toFixed(2),
-          'Oportunidades': a.totalOpportunities,
+          'Oportunidades IA': a.totalOpportunities,
           'Consistência (%)': a.consistencyScore ?? '',
           'Posts monitorados': a.totalPostsMonitored,
           'Alcance 30d': a.reach30d,
-          'Curtidas total': a.totalLikes,
-          'Comentários total': a.totalComments,
+          'Curtidas': a.totalLikes,
+          'Comentários': a.totalComments,
         }]
       })
     )
   }
 
-  const COMP_HEADERS = ['Conta','Snapshot (atual)','Snapshot (baseline)','Seguidores','Seguidores Δ','Taxa viral (%)','Taxa viral Δ','Posts virais','Posts virais Δ','Engajamento 30d (%)','Engajamento Δ','Oportunidades','Oportunidades Δ','Consistência (%)','Consistência Δ','Posts monitorados','Curtidas total','Comentários total','Alcance 30d']
-  const HIST_HEADERS = ['Data captura','Tipo','Nota','Conta','Seguidores','Taxa viral (%)','Posts virais','Engajamento 30d (%)','Oportunidades','Consistência (%)','Posts monitorados','Alcance 30d','Curtidas total','Comentários total']
+  const COMP_HEADERS = ['Conta','Data (atual)','Data (baseline)','Seguidores','Seguidores (variação)','Taxa viral (%)','Taxa viral (variação pp)','Posts virais','Posts virais (variação)','Engajamento 30d (%)','Engajamento (variação pp)','Oportunidades IA','Oportunidades (variação)','Consistência (%)','Consistência (variação pp)','Posts monitorados','Curtidas','Comentários','Alcance 30d']
+  const HIST_HEADERS = ['Data captura','Tipo captura','Nota','Conta','Seguidores','Taxa viral (%)','Posts virais','Engajamento 30d (%)','Oportunidades IA','Consistência (%)','Posts monitorados','Alcance 30d','Curtidas','Comentários']
 
   function handleExportComparativoCsv()  { exportCsv(buildComparisonRows(),  COMP_HEADERS, `impacto-comparativo-${new Date().toISOString().slice(0,10)}.csv`) }
   function handleExportComparativoXlsx() { exportXlsx(buildComparisonRows(), COMP_HEADERS, `impacto-comparativo-${new Date().toISOString().slice(0,10)}.xlsx`, 'Comparativo') }

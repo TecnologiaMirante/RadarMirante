@@ -230,30 +230,28 @@ export default function Radar() {
       monitoring: 'Monitorando', analyzed: 'Analisado', archived: 'Arquivado',
     }
     return postList.map(p => ({
+      'Perfil': pageTitle,
       'Publicação': p.text.slice(0, 200),
       'Tendência': statusLabel[p.status] ?? p.status,
       'Score': p.trendScore,
       'Comentários': p.metrics.comments,
       'Likes': p.metrics.likes,
-      'Shares': p.metrics.shares,
-      'Views': p.metrics.views ?? '',
-      'Plataforma': p.platform,
       'Publicado em': fmtTs(p.publishedAt),
       'URL': p.url,
     }))
   }
 
-  const POST_EXPORT_HEADERS = ['Publicação','Tendência','Score','Comentários','Likes','Shares','Views','Plataforma','Publicado em','URL']
+  const POST_EXPORT_HEADERS = ['Perfil','Publicação','Tendência','Score','Comentários','Likes','Publicado em','URL']
 
   function handleExportPostsCsv() {
     const rows = buildPostRows(filteredPosts)
     const now = new Date().toISOString().slice(0,10)
-    exportCsv(rows, POST_EXPORT_HEADERS, `radar-publicacoes-${now}.csv`)
+    exportCsv(rows, POST_EXPORT_HEADERS, `radar-${account}-${now}.csv`)
   }
   function handleExportPostsXlsx() {
     const rows = buildPostRows(filteredPosts)
     const now = new Date().toISOString().slice(0,10)
-    exportXlsx(rows, POST_EXPORT_HEADERS, `radar-publicacoes-${now}.xlsx`, 'Publicações')
+    exportXlsx(rows, POST_EXPORT_HEADERS, `radar-${account}-${now}.xlsx`, 'Publicações')
   }
 
   const totalComments = useMemo(() => posts.reduce((s, p) => s + p.metrics.comments, 0), [posts])
