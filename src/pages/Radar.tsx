@@ -185,6 +185,7 @@ export default function Radar() {
   const [contentTab, setContentTab] = useState<ContentTab>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [exportOpen, setExportOpen] = useState(false)
   const PAGE_SIZE = 30
   const [lastMonitorRun, setLastMonitorRun] = useState<Date | null>(null)
 
@@ -644,22 +645,33 @@ export default function Radar() {
                 </select>
                 {/* Export */}
                 {filteredPosts.length > 0 && (
-                  <div className="relative group">
+                  <div className="relative">
                     <button
-                      className="flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                      onClick={() => setExportOpen(v => !v)}
+                      className={cn(
+                        'flex items-center gap-1 h-7 px-2 rounded-md border bg-card text-xs transition-colors',
+                        exportOpen
+                          ? 'border-primary/60 text-foreground'
+                          : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/50',
+                      )}
                       title={`Exportar ${filteredPosts.length} publicações`}
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Export</span>
                     </button>
-                    <div className="absolute right-0 top-full mt-1 z-30 hidden group-hover:flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[120px]">
-                      <button onClick={handleExportPostsCsv} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors whitespace-nowrap">
-                        ↓ CSV
-                      </button>
-                      <button onClick={handleExportPostsXlsx} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors border-t border-border/50 whitespace-nowrap">
-                        ↓ Excel (.xlsx)
-                      </button>
-                    </div>
+                    {exportOpen && (
+                      <>
+                        <div className="fixed inset-0 z-20" onClick={() => setExportOpen(false)} />
+                        <div className="absolute right-0 top-full mt-1 z-30 flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[140px]">
+                          <button onClick={() => { handleExportPostsCsv(); setExportOpen(false) }} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors whitespace-nowrap">
+                            ↓ CSV
+                          </button>
+                          <button onClick={() => { handleExportPostsXlsx(); setExportOpen(false) }} className="px-3 py-2 text-xs text-left hover:bg-accent transition-colors border-t border-border/50 whitespace-nowrap">
+                            ↓ Excel (.xlsx)
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
                 {/* Visualização */}

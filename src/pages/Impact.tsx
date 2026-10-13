@@ -194,6 +194,7 @@ export default function ImpactPage() {
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set())
 
   // Comparação de períodos
+  const [exportOpen, setExportOpen] = useState(false)
   const [periodMode, setPeriodMode] = useState(false)
   const [periodAStartId, setPeriodAStartId] = useState<string | null>(null)
   const [periodAEndId,   setPeriodAEndId]   = useState<string | null>(null)
@@ -575,19 +576,32 @@ export default function ImpactPage() {
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {snapshots.length > 0 && (
-              <div className="relative group">
-                <button className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors">
+              <div className="relative">
+                <button
+                  onClick={() => setExportOpen(v => !v)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm transition-colors',
+                    exportOpen
+                      ? 'border-primary/60 text-foreground bg-accent/30'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/50',
+                  )}
+                >
                   <Download className="w-4 h-4" />
                   <span className="hidden sm:inline text-xs">Export</span>
                 </button>
-                <div className="absolute right-0 top-full mt-1 z-30 hidden group-hover:flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[170px]">
-                  <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Comparativo atual</p>
-                  <button onClick={handleExportComparativoCsv}  className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ CSV</button>
-                  <button onClick={handleExportComparativoXlsx} className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors border-b border-border/40">↓ Excel (.xlsx)</button>
-                  <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Histórico completo</p>
-                  <button onClick={handleExportHistoricoCsv}    className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ CSV</button>
-                  <button onClick={handleExportHistoricoXlsx}   className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ Excel (.xlsx)</button>
-                </div>
+                {exportOpen && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setExportOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-30 flex flex-col bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[175px]">
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Comparativo atual</p>
+                      <button onClick={() => { handleExportComparativoCsv();  setExportOpen(false) }} className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ CSV</button>
+                      <button onClick={() => { handleExportComparativoXlsx(); setExportOpen(false) }} className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors border-b border-border/40">↓ Excel (.xlsx)</button>
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Histórico completo</p>
+                      <button onClick={() => { handleExportHistoricoCsv();    setExportOpen(false) }} className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ CSV</button>
+                      <button onClick={() => { handleExportHistoricoXlsx();   setExportOpen(false) }} className="px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors">↓ Excel (.xlsx)</button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {snapshots.length >= 3 && (
