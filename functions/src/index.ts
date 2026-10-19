@@ -38,6 +38,8 @@ const mirantefmToken              = defineSecret('instagram-token-mirantefm')
 const mirantefmAccountId          = defineSecret('instagram-account-id-mirantefm')
 const imiranteesporteToken        = defineSecret('instagram-token-imiranteesporte')
 const imiranteesporteAccountId    = defineSecret('instagram-account-id-imiranteesporte')
+const geglobomaranhaoToken        = defineSecret('instagram-token-geglobomaranhao')
+const geglobomaranhaoAccountId    = defineSecret('instagram-account-id-geglobomaranhao')
 
 interface AccountEntry {
   radarId: string
@@ -77,6 +79,12 @@ function getActiveAccounts(): AccountEntry[] {
       profile: 'esporte' as AccountProfile,
       getToken: () => imiranteesporteToken.value(),
       getAccountId: () => imiranteesporteAccountId.value(),
+    },
+    {
+      radarId: 'geglobomaranhao',
+      profile: 'esporte' as AccountProfile,
+      getToken: () => geglobomaranhaoToken.value(),
+      getAccountId: () => geglobomaranhaoAccountId.value(),
     },
   ]
 }
