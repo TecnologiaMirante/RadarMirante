@@ -81,7 +81,7 @@ function getActiveAccounts(): AccountEntry[] {
       getAccountId: () => imiranteesporteAccountId.value(),
     },
     {
-      radarId: 'geglobomaranhao',
+      radarId: 'ge.globomaranhao',
       profile: 'esporte' as AccountProfile,
       getToken: () => geglobomaranhaoToken.value(),
       getAccountId: () => geglobomaranhaoAccountId.value(),
@@ -559,7 +559,7 @@ export const syncInsights = onSchedule(
     region: 'southamerica-east1',
     timeoutSeconds: 540,
     memory: '512MiB',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId, geglobomaranhaoToken, geglobomaranhaoAccountId],
   },
   async () => {
     console.log('[syncInsights] Iniciando')
@@ -598,7 +598,7 @@ export const collectInstagram = onSchedule(
     region: 'southamerica-east1',
     timeoutSeconds: 540,
     memory: '512MiB',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId, geglobomaranhaoToken, geglobomaranhaoAccountId],
   },
   async () => {
     console.log('[collectInstagram] Iniciando coleta')
