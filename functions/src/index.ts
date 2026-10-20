@@ -40,6 +40,8 @@ const imiranteesporteToken        = defineSecret('instagram-token-imiranteesport
 const imiranteesporteAccountId    = defineSecret('instagram-account-id-imiranteesporte')
 const geglobomaranhaoToken        = defineSecret('instagram-token-geglobomaranhao')
 const geglobomaranhaoAccountId    = defineSecret('instagram-account-id-geglobomaranhao')
+const g1maranhaoToken             = defineSecret('instagram-token-g1maranhao')
+const g1maranhaoAccountId         = defineSecret('instagram-account-id-g1maranhao')
 
 interface AccountEntry {
   radarId: string
@@ -85,6 +87,12 @@ function getActiveAccounts(): AccountEntry[] {
       profile: 'esporte' as AccountProfile,
       getToken: () => geglobomaranhaoToken.value(),
       getAccountId: () => geglobomaranhaoAccountId.value(),
+    },
+    {
+      radarId: 'g1maranhao',
+      profile: 'editorial' as AccountProfile,
+      getToken: () => g1maranhaoToken.value(),
+      getAccountId: () => g1maranhaoAccountId.value(),
     },
   ]
 }
@@ -559,7 +567,7 @@ export const syncInsights = onSchedule(
     region: 'southamerica-east1',
     timeoutSeconds: 540,
     memory: '512MiB',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId, geglobomaranhaoToken, geglobomaranhaoAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId, geglobomaranhaoToken, geglobomaranhaoAccountId, g1maranhaoToken, g1maranhaoAccountId],
   },
   async () => {
     console.log('[syncInsights] Iniciando')
@@ -598,7 +606,7 @@ export const collectInstagram = onSchedule(
     region: 'southamerica-east1',
     timeoutSeconds: 540,
     memory: '512MiB',
-    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId, geglobomaranhaoToken, geglobomaranhaoAccountId],
+    secrets: [instagramToken, instagramAccountId, tvmiranteToken, tvmiranteAccountId, imirantepoliticaToken, imirantepoliticaAccountId, mirantefmToken, mirantefmAccountId, imiranteesporteToken, imiranteesporteAccountId, geglobomaranhaoToken, geglobomaranhaoAccountId, g1maranhaoToken, g1maranhaoAccountId],
   },
   async () => {
     console.log('[collectInstagram] Iniciando coleta')

@@ -23,6 +23,7 @@ import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 import tvmiranteLogo from '@/assets/tvmirante_logo.png'
 import imirantepoliticaLogo from '@/assets/imirantepolitica_logo.png'
 import mirantefmLogo from '@/assets/mirantefm96_logo.png'
+import geblobomaranhaoLogo from '@/assets/geglobomaranhao.png'
 
 const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
@@ -30,6 +31,7 @@ const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   tvmirante: tvmiranteLogo,
   imirantepolitica: imirantepoliticaLogo,
   mirantefm: mirantefmLogo,
+  'ge.globomaranhao': geblobomaranhaoLogo,
 }
 
 const PAGE_MAP: Record<string, { label: string; icon: React.FC<React.SVGProps<SVGSVGElement>>; desc: string }> = {
