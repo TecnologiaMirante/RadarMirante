@@ -12,7 +12,8 @@ import imiranteEsporteLogo from '@/assets/imiranteesporte_logo.png'
 import tvmiranteLogo from '@/assets/tvmirante_logo.png'
 import imirantepoliticaLogo from '@/assets/imirantepolitica_logo.png'
 import mirantefmLogo from '@/assets/mirantefm96_logo.png'
-import geblobomaranhaoLogo from '@/assets/geglobomaranhao.png'
+import geglobomaranhaoLogo from '@/assets/geglobomaranhao_logo.png'
+import g1maranhaoLogo from '@/assets/g1maranhao_logo.png'
 
 const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   imirante: imiranteLogo,
@@ -20,7 +21,8 @@ const ACCOUNT_LOGOS: Record<string, string | undefined> = {
   tvmirante: tvmiranteLogo,
   imirantepolitica: imirantepoliticaLogo,
   mirantefm: mirantefmLogo,
-  'ge.globomaranhao': geblobomaranhaoLogo,
+  'ge.globomaranhao': geglobomaranhaoLogo,
+  'g1maranhao': g1maranhaoLogo,
 }
 
 const NAV_GROUPS = [
