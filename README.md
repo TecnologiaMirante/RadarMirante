@@ -1,154 +1,93 @@
-# Radar iMirante
+# Mirante Radar
 
-Dashboard de monitoramento de engajamento em redes sociais para as contas do Grupo Mirante. Detecta posts em tendência em tempo real, analisa comentários com IA e gera oportunidades editoriais.
-
----
+Plataforma interna de monitoramento de engajamento do Instagram para as contas do Grupo Mirante. Desenvolvida pela equipe Mirante IA.
 
 ## Stack
 
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | React 18 + TypeScript + Vite |
-| UI | Tailwind CSS + shadcn/ui + Recharts |
-| Backend | Firebase Cloud Functions v2 (Node.js 22) |
-| Banco | Firestore |
-| Auth | Firebase Auth (restrito a `@mirante.com.br`) |
-| IA | OpenAI GPT-4o |
-| Agendamento | Cloud Scheduler |
-| Filas | Cloud Tasks |
-| Secrets | Google Secret Manager |
-| Hosting | Firebase Hosting |
-| Região | `southamerica-east1` |
-
----
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: Firebase Cloud Functions v2 (Node.js 20)
+- **Banco de dados**: Firestore
+- **Autenticação**: Firebase Auth (Google Sign-In, restrito a @mirante.com.br)
+- **Armazenamento de segredos**: Google Secret Manager
+- **Hosting**: Firebase Hosting
+- **API de dados**: Instagram Graph API v26.0
 
 ## Contas monitoradas
 
-| Radar ID | Conta | Perfil |
-|----------|-------|--------|
-| `imirante` | @imirante | `editorial` |
-| `tvmirante` | @tvmirante | `viral` |
-| `imiranteesporte` | @imiranteesporte | `viral` *(a configurar)* |
+| Conta              | Perfil    | Monitorando desde |
+|--------------------|-----------|-------------------|
+| @imirante          | editorial | 21/09/2026        |
+| @imiranteesporte   | esporte   | 08/10/2026        |
+| @tvmirante         | viral     | 29/09/2026        |
+| @imirantepolitica  | editorial | 01/10/2026        |
+| Mirante FM 96,1    | rádio     | 05/10/2026        |
+| @ge.globomaranhao  | esporte   | 19/10/2026        |
+| @g1maranhao        | editorial | 20/10/2026        |
 
-Para adicionar uma conta: crie os secrets no Secret Manager, declare com `defineSecret()` em `functions/src/index.ts` e adicione uma entrada em `getActiveAccounts()`.
+> **Nota**: `ge.globomaranhao` e `g1maranhao` são contas afiliadas à Globo — possuem perfil de engajamento estruturalmente diferente das contas Mirante. Considerar ao interpretar scores e comparativos.
 
----
-
-## Secrets no Google Secret Manager
-
-Cada conta Instagram tem seu próprio par de secrets. Nenhum valor sensível vai para o código ou para variáveis de ambiente commitadas.
-
-| Secret | Descrição |
-|--------|-----------|
-| `OPENAI_API_KEY` | Chave da API OpenAI |
-| `INSTAGRAM_ACCESS_TOKEN` | System User Token — @imirante |
-| `INSTAGRAM_ACCOUNT_ID` | ID numérico Business — @imirante |
-| `TVMIRANTE_INSTAGRAM_ACCESS_TOKEN` | System User Token — @tvmirante |
-| `TVMIRANTE_INSTAGRAM_ACCOUNT_ID` | ID numérico Business — @tvmirante |
-
-Para criar ou atualizar um secret:
+## Desenvolvimento
 
 ```bash
-echo "valor" | gcloud secrets versions add NOME_DO_SECRET --data-file=- --project radarimirante
-```
-
----
-
-## Variáveis de ambiente (não-sensíveis)
-
-Copie `functions/.env.example` para `functions/.env` e preencha:
-
-```
-TASKS_SA_EMAIL=radar-tasks@radarimirante.iam.gserviceaccount.com
-TASKS_LOCATION=southamerica-east1
-TASKS_QUEUE=radar-analysis
-ANALYZE_POST_URL=https://analyzepost-HASH-rj.a.run.app
-```
-
-O arquivo `functions/.env` **nunca deve ser commitado**.
-
----
-
-## Desenvolvimento local
-
-```bash
-# Instalar dependências
 npm install
-cd functions && npm install && cd ..
-
-# Rodar frontend
 npm run dev
-
-# Compilar functions
-cd functions && npm run build
 ```
 
-> O projeto **não usa emuladores**. Desenvolvimento aponta diretamente para o projeto `radarimirante` no Firebase.
-
----
+O app sobe em `http://localhost:5173`. Autenticação exige conta `@mirante.com.br`.
 
 ## Deploy
 
 ```bash
-# 1. Build das functions
-cd functions && npm run build && cd ..
-
-# 2. Build do frontend
 npm run build
-
-# 3. Deploy completo
-npx firebase deploy --only functions,hosting,firestore:rules --project radarimirante
+firebase deploy
 ```
 
----
+O comando acima faz deploy de:
+- Frontend (Firebase Hosting)
+- Cloud Functions (coleta e sync de insights)
+- Firestore Rules
+- Firestore Indexes
 
-## Agendamentos (Cloud Scheduler)
+## Funções agendadas
 
-| Função | Schedule | Descrição |
-|--------|----------|-----------|
-| `monitorPostsScheduled` | `0 6-20 * * *` | Monitora posts ativos a cada hora (6h–20h, horário de Brasília) |
-| `collectInstagram` | `0 6-20 * * *` | Coleta novos posts do Instagram a cada hora |
-| `syncInsights` | a cada 6 horas | Sincroniza métricas de alcance, seguidores e impressões |
+| Função           | Horário           | O que faz                                      |
+|------------------|-------------------|------------------------------------------------|
+| `collectInstagram` | Toda hora (00 min) | Coleta posts novos e atualiza métricas         |
+| `syncInsights`   | Diário às 03h     | Sincroniza insights de perfil do Instagram     |
 
-Para forçar uma execução manual:
+## Secrets (Google Secret Manager)
 
-```bash
-gcloud scheduler jobs run firebase-schedule-syncInsights-southamerica-east1 \
-  --location=southamerica-east1 --project=radarimirante
-```
+Todas as credenciais de acesso às APIs do Instagram ficam no Secret Manager do GCP (projeto `radarimirante`). Nunca commitar tokens ou IDs de conta no código.
 
----
+Padrão de nomes:
+- `instagram-token-<radarId>` — Token de acesso da conta
+- `instagram-account-id-<radarId>` — Instagram Business Account ID
 
-## Estrutura
-
-```
-├── src/                        # Frontend React
-│   ├── components/
-│   │   ├── layout/             # Header, Sidebar
-│   │   ├── radar/              # ActivityChart, WordCloud, etc.
-│   │   └── ui/                 # shadcn/ui components
-│   ├── pages/                  # Dashboard, Radar, Instagram, Analyses, PostDetails
-│   ├── services/               # Acesso ao Firestore (radar.ts, instagram.ts)
-│   ├── contexts/               # AccountContext
-│   └── types/                  # radar.ts
-├── functions/src/              # Cloud Functions
-│   ├── ai/                     # analyzeTrendingPost, prompts
-│   ├── connectors/             # InstagramConnector
-│   ├── ingest/                 # normalizePost
-│   ├── radar/                  # score, baseline, opportunity, snapshots
-│   ├── scheduled/              # monitorPosts, syncInstagramInsights
-│   ├── config/                 # radar.ts (configurações centralizadas)
-│   └── index.ts                # Exports e agendamentos
-├── scripts/                    # seedAccounts.cjs
-├── firestore.rules
-└── firebase.json
-```
-
----
+Para adicionar uma nova conta, consulte as instruções internas de onboarding de contas.
 
 ## Segurança
 
-- Acesso restrito a contas `@mirante.com.br` — verificado no Cloud Function `onUserCreated`
-- Secrets exclusivamente no Google Secret Manager (nunca em código ou `.env` commitado)
-- Projeto independente — sem integração com outros sistemas do Grupo Mirante
-- Regras do Firestore em `firestore.rules`
+- Acesso restrito a usuários autenticados com e-mail `@mirante.com.br`
+- Regras do Firestore garantem que dados nunca sejam gravados pelo frontend
+- Nenhuma credencial no código — tudo via Google Secret Manager
+- Projeto totalmente independente de outros sistemas internos
+
+## Estrutura do projeto
+
+```
+src/
+  components/     # Componentes React (layout, radar, ui)
+  contexts/       # AccountContext, AuthContext
+  hooks/          # useAuth, useRadar, useTheme, etc.
+  pages/          # Radar, Dashboard, Insights, Análises, Impacto, Settings
+  services/       # Firebase, radar queries, Instagram insights
+  types/          # Tipos TypeScript
+  utils/          # Exportação CSV/XLSX, formatação
+
+functions/src/
+  index.ts        # Funções agendadas (coleta + sync de insights)
+  connectors/     # InstagramConnector (Graph API)
+  calculators/    # TrendScore, Baseline, PostScorer
+
+scripts/          # Scripts utilitários (seed, migrações)
+```

@@ -59,7 +59,11 @@ const NAV_GROUPS = [
 ]
 
 function getCollapsed(): boolean {
-  try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
+  try {
+    const stored = localStorage.getItem('sidebar-collapsed')
+    if (stored !== null) return stored === 'true'
+    return window.innerWidth < 768
+  } catch { return false }
 }
 
 function AccountLogo({ id, size = 8 }: { id: string; size?: number }) {
