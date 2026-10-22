@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   LogOut, Sun, Moon, Radio, LayoutDashboard, Sparkles, Instagram, Settings,
-  ChevronDown, Check,
+  ChevronDown, Check, Flame,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
@@ -41,6 +41,7 @@ const PAGE_MAP: Record<string, { label: string; icon: React.FC<React.SVGProps<SV
   '/dashboard': { label: 'Dashboard',       icon: LayoutDashboard, desc: 'Visão geral das métricas' },
   '/analises':  { label: 'Análises',       icon: Sparkles,        desc: 'Pautas e insights gerados pela IA' },
   '/insights':  { label: 'Insights',        icon: Instagram,       desc: 'Métricas de perfil e audiência' },
+  '/tendencias': { label: 'Tendências',     icon: Flame,           desc: 'O que está em alta agora' },
   '/settings':  { label: 'Configurações',  icon: Settings,        desc: 'Conta e preferências do sistema' },
 }
 

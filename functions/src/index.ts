@@ -7,6 +7,7 @@ import { defineSecret } from 'firebase-functions/params'
 import { monitorActivePosts } from './scheduled/monitorPosts'
 import { syncInstagramInsights } from './scheduled/syncInstagramInsights'
 import { captureWeeklySnapshot } from './scheduled/captureWeeklySnapshot'
+import { fetchAndStoreTrends } from './scheduled/fetchTrends'
 import { analyzeTrendingPost } from './ai/analyzeTrendingPost'
 import { createOrUpdateOpportunity } from './radar/opportunity'
 import { getSnapshotHistory } from './radar/snapshots'
@@ -552,6 +553,46 @@ export const weeklyPerformanceSnapshot = onSchedule(
         runCount: admin.firestore.FieldValue.increment(1),
       }, { merge: true })
       console.error('[weeklyPerformanceSnapshot] Erro:', err)
+      throw err
+    }
+  },
+)
+
+// ─── Farejador de Tendências ─────────────────────────────────────────────────
+// Busca Google Trends BR (RSS oficial) + Twitter trends via getdaytrends.com
+// Salva em Firestore: trends/google e trends/twitter
+
+export const fetchTrends = onSchedule(
+  {
+    schedule: 'every 30 minutes',
+    timeZone: 'America/Sao_Paulo',
+    retryCount: 1,
+    region: 'southamerica-east1',
+    timeoutSeconds: 120,
+    memory: '256MiB',
+  },
+  async () => {
+    const start = Date.now()
+    try {
+      await fetchAndStoreTrends(db)
+      await db.collection('systemHealth').doc('fetchTrends').set({
+        lastRun: admin.firestore.FieldValue.serverTimestamp(),
+        lastStatus: 'success',
+        lastDurationMs: Date.now() - start,
+        consecutiveErrors: 0,
+        lastError: null,
+        runCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true })
+    } catch (err) {
+      await db.collection('systemHealth').doc('fetchTrends').set({
+        lastRun: admin.firestore.FieldValue.serverTimestamp(),
+        lastStatus: 'error',
+        lastDurationMs: Date.now() - start,
+        lastError: err instanceof Error ? err.message : String(err),
+        consecutiveErrors: admin.firestore.FieldValue.increment(1),
+        runCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true })
+      console.error('[fetchTrends] Erro:', err)
       throw err
     }
   },

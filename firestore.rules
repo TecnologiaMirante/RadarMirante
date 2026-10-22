@@ -227,6 +227,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ─── Trends (Farejador) ───────────────────────────────────────────────────
+
+    match /trends/{platform} {
+      allow read: if isMiranteUser();
+      allow write: if false;
+    }
+
     // ─── System Health ────────────────────────────────────────────────────────
 
     match /systemHealth/{docId} {

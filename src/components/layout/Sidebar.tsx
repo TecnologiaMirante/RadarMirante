@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Radio, Settings, ChevronLeft, ChevronRight,
-  LayoutDashboard, Sparkles, Instagram, ChevronDown, TrendingUp,
+  LayoutDashboard, Sparkles, Instagram, ChevronDown, TrendingUp, Flame,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAccount } from '@/contexts/AccountContext'
@@ -37,8 +37,9 @@ const NAV_GROUPS = [
   {
     label: 'Conteúdo',
     items: [
-      { to: '/analises',  icon: Sparkles,   label: 'Análises',      desc: 'Pautas geradas pela IA' },
-      { to: '/insights',  icon: Instagram,  label: 'Insights',      desc: 'Métricas do perfil' },
+      { to: '/analises',    icon: Sparkles,    label: 'Análises',     desc: 'Pautas geradas pela IA' },
+      { to: '/insights',    icon: Instagram,   label: 'Insights',     desc: 'Métricas do perfil' },
+      { to: '/tendencias',  icon: Flame,       label: 'Tendências',   desc: 'O que está em alta agora' },
     ],
     adminOnly: false,
   },
