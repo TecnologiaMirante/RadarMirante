@@ -180,7 +180,7 @@ export function WordCloud({ texts, loading, height = 210 }: WordCloudProps) {
   if (words.length === 0) {
     return (
       <p className="text-sm text-muted-foreground/50 italic text-center py-10">
-        Nenhum comentário neste período.
+        Nenhum comentário neste período. Tente um intervalo maior.
       </p>
     )
   }

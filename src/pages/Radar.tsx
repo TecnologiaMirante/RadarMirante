@@ -202,23 +202,11 @@ export default function Radar() {
   }, [])
 
   useEffect(() => {
-    const MIN_TEXTS = 5
-    const FALLBACK_PERIODS = [7 * 24 * 3600_000, 30 * 24 * 3600_000]
-    setCloudLoading(true);
-    (async () => {
-      const now = Date.now()
-      const initial = await getRecentCommentTexts(now - cloudPeriod, undefined, account)
-      if (initial.length >= MIN_TEXTS) { setCloudTexts(initial); return }
-      for (const ms of FALLBACK_PERIODS) {
-        if (ms <= cloudPeriod) continue
-        const expanded = await getRecentCommentTexts(now - ms, undefined, account)
-        if (expanded.length >= MIN_TEXTS || ms === FALLBACK_PERIODS[FALLBACK_PERIODS.length - 1]) {
-          setCloudTexts(expanded)
-          return
-        }
-      }
-      setCloudTexts(initial)
-    })().catch(console.error).finally(() => setCloudLoading(false))
+    setCloudLoading(true)
+    getRecentCommentTexts(Date.now() - cloudPeriod, undefined, account)
+      .then(setCloudTexts)
+      .catch(console.error)
+      .finally(() => setCloudLoading(false))
   }, [cloudPeriod, account])
 
   const overrideAllLabel = useMemo(() => {
