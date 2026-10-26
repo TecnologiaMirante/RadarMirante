@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "trends_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "platform", "order": "ASCENDING" },
+        { "fieldPath": "lastSeen",  "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "opportunities",
       "queryScope": "COLLECTION",
       "fields": [

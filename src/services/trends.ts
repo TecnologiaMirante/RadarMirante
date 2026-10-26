@@ -1,18 +1,28 @@
-import { doc, onSnapshot, type Timestamp } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, type Timestamp } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 
+export interface TrendNewsItem {
+  title: string
+  snippet: string
+  source: string
+  url: string
+}
+
 export interface TrendTopic {
+  id: string
   rank: number
   title: string
   score?: string
   duration?: string
+  newsItems?: TrendNewsItem[]
+  firstSeen: Timestamp
+  lastSeen: Timestamp
 }
 
 export interface PlatformTrends {
   topics: TrendTopic[]
-  updatedAt: Timestamp | null
-  error?: string
   loading: boolean
+  error?: string
 }
 
 export type TrendPlatform = 'google' | 'twitter'
@@ -21,21 +31,22 @@ export function subscribeTrends(
   platform: TrendPlatform,
   onData: (data: PlatformTrends) => void,
 ): () => void {
+  const q = query(
+    collection(db, 'trends_history'),
+    where('platform', '==', platform),
+  )
+
   return onSnapshot(
-    doc(db, 'trends', platform),
-    (snap) => {
-      if (!snap.exists()) {
-        onData({ topics: [], updatedAt: null, loading: false })
-        return
-      }
-      const data = snap.data()
-      onData({
-        topics: (data.topics ?? []) as TrendTopic[],
-        updatedAt: data.updatedAt ?? null,
-        error: data.error,
-        loading: false,
-      })
+    q,
+    snap => {
+      const topics = snap.docs
+        .map(d => ({ id: d.id, ...(d.data() as Omit<TrendTopic, 'id'>) }))
+        .sort((a, b) => (b.lastSeen?.toMillis() ?? 0) - (a.lastSeen?.toMillis() ?? 0))
+      onData({ topics, loading: false })
     },
-    () => onData({ topics: [], updatedAt: null, loading: false }),
+    (err) => {
+      console.error('[subscribeTrends]', err)
+      onData({ topics: [], loading: false, error: (err as Error).message })
+    },
   )
 }

@@ -16,6 +16,7 @@ const OpportunityDetails = lazy(() => import('@/pages/OpportunityDetails'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const ImpactPage = lazy(() => import('@/pages/Impact'))
 const TrendsPage = lazy(() => import('@/pages/Trends'))
+const TrendDetail = lazy(() => import('@/pages/TrendDetail'))
 
 function LoadingScreen() {
   return (
@@ -71,6 +72,7 @@ function AppRoutes() {
         <Route path="settings" element={<Suspense fallback={<LoadingScreen />}><Settings /></Suspense>} />
         <Route path="impacto" element={<Suspense fallback={<LoadingScreen />}><ImpactPage /></Suspense>} />
         <Route path="tendencias" element={<Suspense fallback={<LoadingScreen />}><TrendsPage /></Suspense>} />
+        <Route path="tendencias/:docId" element={<Suspense fallback={<LoadingScreen />}><TrendDetail /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/radar" replace />} />
     </Routes>

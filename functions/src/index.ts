@@ -636,6 +636,162 @@ export const syncInsights = onSchedule(
   },
 )
 
+// ─── Gerador de roteiro para tendências ──────────────────────────────────────
+
+// Padrão editorial obrigatório em todos os roteiros
+const EDITORIAL_SYSTEM = `Você é roteirista sênior da Mirante Comunicações, maior grupo de comunicação do Maranhão, afiliada da Rede Globo.
+
+REGRAS INEGOCIÁVEIS — aplicam-se a TODOS os cenários:
+1. Imparcialidade absoluta: nunca tome partido, não elogie nem critique políticos, partidos, empresas, times ou pessoas públicas.
+2. Linguagem factual: use apenas fatos verificáveis. Atribua afirmações a fontes ("segundo o ministério", "de acordo com a CBF"). Nunca afirme algo como verdade se não for consenso público.
+3. Zero adjetivos valorativos sobre pessoas ou instituições: proibido usar "excelente", "terrível", "corrupto", "herói", "símbolo de esperança", "ameaça" e similares.
+4. Em temas polêmicos (política, religião, torcidas), apresente ângulos opostos com o mesmo peso e o mesmo número de linhas.
+5. Nunca suponha intenções, sentimentos ou motivações de pessoas públicas.
+6. O roteiro deve informar o público, nunca mobilizá-lo politicamente.
+
+Formato de saída: apenas o roteiro pronto, sem títulos introdutórios, sem explicações, sem "aqui está o roteiro:".`
+
+const SCRIPT_SCENARIOS: Record<string, { label: string; account: string; instruction: string }> = {
+  entretenimento: {
+    label: 'Entretenimento',
+    account: 'iMirante',
+    instruction: `Crie um roteiro de Reels para o Instagram do iMirante (30–45 seg de fala).
+Estrutura obrigatória (use os marcadores em colchetes):
+[ABERTURA] — gancho que prende a atenção em até 3 segundos, baseado no fato, sem sensacionalismo.
+[DESENVOLVIMENTO] — explique o que aconteceu, por que importa, qual o impacto para o público do Maranhão.
+[ENCERRAMENTO] — convide o público a comentar ou acompanhar o iMirante. Não direcione a opinião.
+Tom: dinâmico e acessível, mas jornalisticamente rigoroso. Pode usar perguntas retóricas para engajamento, desde que neutras. Sem emojis excessivos.`,
+  },
+  jornalismo: {
+    label: 'Jornalismo',
+    account: 'iMirante',
+    instruction: `Crie um roteiro de Reels jornalístico para o Instagram do iMirante (30–45 seg de fala).
+Estrutura obrigatória:
+[CABEÇA] — o fato principal em uma frase direta, como uma cabeça de telejornal.
+[DESENVOLVIMENTO] — contexto, quem está envolvido, o que aconteceu e quais são os impactos. Se houver lados opostos, cite ambos com equilíbrio.
+[ENCERRAMENTO] — próximos passos ou o que o público pode esperar. Finalize informando onde acompanhar mais.
+Tom: sóbrio, objetivo, padrão Globo News. Sem adjetivos, sem carga emocional, sem opinião implícita.`,
+  },
+  esportes: {
+    label: 'Esportes',
+    account: 'iMirante Esporte',
+    instruction: `Crie um roteiro de Reels esportivo para o Instagram do iMirante Esporte (30–40 seg de fala).
+Estrutura obrigatória:
+[CHAMADA] — o resultado ou o fato esportivo de forma direta e impactante.
+[DESENVOLVIMENTO] — dados do jogo ou do atleta, contexto da competição, impacto na tabela/ranking.
+[ENCERRAMENTO] — próximos jogos, desafios ou o que vem aí. Sem torcer por time algum.
+Tom: direto e apaixonado pelo esporte, mas imparcial entre times e atletas. Se houver polêmica (doping, VAR, arbitragem), apresente a versão dos dois lados. Conecte ao esporte maranhense quando houver relação real.`,
+  },
+}
+
+export const generateTrendScript = onDocumentCreated(
+  {
+    document: 'scriptRequests/{requestId}',
+    region: 'southamerica-east1',
+    timeoutSeconds: 120,
+    memory: '256MiB',
+    secrets: [openaiApiKey],
+  },
+  async (event) => {
+    const snap = event.data
+    if (!snap) return
+    const requestId = event.params.requestId
+    const data = snap.data()
+    const requestRef = db.collection('scriptRequests').doc(requestId)
+
+    const userRecord = await admin.auth().getUser(data.requestedBy as string).catch(() => null)
+    const email = userRecord?.email ?? ''
+    if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+      await requestRef.update({ status: 'failed', error: 'Domínio não autorizado' })
+      return
+    }
+
+    const scenarioKey = data.scenario as string
+    const scenario = SCRIPT_SCENARIOS[scenarioKey]
+    if (!scenario) {
+      await requestRef.update({ status: 'failed', error: 'Cenário inválido' })
+      return
+    }
+
+    await requestRef.update({ status: 'running' })
+
+    try {
+      const apiKey = openaiApiKey.value()
+      const trendTitle = data.trendTitle as string
+      const newsContext = data.newsContext as string | null
+
+      // Passo 1: por que está em alta (análise neutra e factual)
+      const contextPrompt = `Explique de forma objetiva e imparcial por que "${trendTitle}" está em destaque no Brasil neste momento.${newsContext ? `\n\nContexto disponível: ${newsContext}` : ''}
+
+Responda em 4-6 frases em português do Brasil seguindo estas regras:
+- Descreva apenas fatos concretos e verificáveis que explicam o aumento de interesse
+- Inclua o contexto mais amplo (histórico, político, social, esportivo ou cultural) de forma neutra
+- Não opine, não celebre e não condene — nem implicitamente
+- Não use frases como "símbolo de", "esperança", "ameaça", "polêmica" como adjetivo
+- Se houver lados opostos, mencione ambos brevemente e com o mesmo peso
+- Use atribuição quando necessário: "segundo X", "de acordo com Y"`
+
+      const ctxRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: EDITORIAL_SYSTEM },
+            { role: 'user', content: contextPrompt },
+          ],
+          max_tokens: 400,
+          temperature: 0.4,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!ctxRes.ok) throw new Error(`OpenAI context: HTTP ${ctxRes.status}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ctxJson = await ctxRes.json() as any
+      const whyTrending = ((ctxJson.choices?.[0]?.message?.content as string) ?? '').trim()
+
+      // Passo 2: roteiro para o cenário escolhido
+      const scriptPrompt = `Assunto em destaque: "${trendTitle}"
+Contexto factual: ${whyTrending}
+Perfil de publicação: ${scenario.account}
+
+${scenario.instruction}`
+
+      const scriptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: EDITORIAL_SYSTEM },
+            { role: 'user', content: scriptPrompt },
+          ],
+          max_tokens: 900,
+          temperature: 0.6,
+        }),
+        signal: AbortSignal.timeout(45_000),
+      })
+      if (!scriptRes.ok) throw new Error(`OpenAI script: HTTP ${scriptRes.status}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scriptJson = await scriptRes.json() as any
+      const script = ((scriptJson.choices?.[0]?.message?.content as string) ?? '').trim()
+
+      await requestRef.update({
+        status: 'completed',
+        whyTrending,
+        script,
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+
+      console.log(`[generateTrendScript] "${trendTitle}" → ${scenarioKey} (by ${email})`)
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      await requestRef.update({ status: 'failed', error: errMsg })
+      console.error('[generateTrendScript] Erro:', err)
+    }
+  },
+)
+
 // ─── Coleta Instagram agendada ────────────────────────────────────────────────
 
 // Coleta a cada hora entre 6h e 20h (horário de Brasília).
