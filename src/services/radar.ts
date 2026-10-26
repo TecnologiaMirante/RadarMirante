@@ -196,47 +196,53 @@ export async function getPostComments(postId: string, maxItems = 50): Promise<im
 }
 
 export async function getRecentCommentTexts(sinceMs: number, toMs?: number, account: RadarAccount = 'imirante', maxItems = 2000): Promise<string[]> {
-  const filterAndMap = (docs: import('firebase/firestore').QueryDocumentSnapshot[], accountPostIds?: Set<string>) =>
-    docs
-      .filter((d) => {
-        if (accountPostIds !== undefined) {
-          const postId = d.ref.parent.parent?.id
-          if (!postId || !accountPostIds.has(postId)) return false
-        }
-        const ts = d.data().publishedAt as { toMillis?: () => number } | undefined
-        if (!ts?.toMillis) return false
-        const ms = ts.toMillis()
-        return ms >= sinceMs && (toMs === undefined || ms <= toMs)
-      })
-      .map((d) => (d.data().text as string) ?? '')
-      .filter(Boolean)
+  const inRange = (d: import('firebase/firestore').QueryDocumentSnapshot) => {
+    const ts = d.data().publishedAt as { toMillis?: () => number } | undefined
+    if (!ts?.toMillis) return false
+    const ms = ts.toMillis()
+    return ms >= sinceMs && (toMs === undefined || ms <= toMs)
+  }
 
-  // For non-imirante accounts, resolve their post IDs first so we can
-  // filter collectionGroup results without relying on a field that may
-  // not exist on older comment documents.
-  let accountPostIds: Set<string> | undefined
+  // For non-imirante accounts fetch comments directly from each post's
+  // subcollection — avoids the collectionGroup limit swamping smaller accounts.
   if (account !== 'imirante') {
     const postsSnap = await getDocs(query(
       collection(db, 'posts'),
       where('account', '==', account),
     ))
-    accountPostIds = new Set(postsSnap.docs.map((d) => d.id))
-    if (accountPostIds.size === 0) return []
+    if (postsSnap.empty) return []
+
+    const perPost = Math.ceil(maxItems / postsSnap.docs.length)
+    const batches = await Promise.all(
+      postsSnap.docs.map(postDoc =>
+        getDocs(query(
+          collection(db, 'posts', postDoc.id, 'comments'),
+          orderBy('publishedAt', 'desc'),
+          limit(perPost),
+        ))
+      )
+    )
+    return batches
+      .flatMap(snap => snap.docs)
+      .filter(inRange)
+      .map(d => (d.data().text as string) ?? '')
+      .filter(Boolean)
   }
 
+  // imirante: use collectionGroup (covers all historical untagged posts)
   try {
     const snap = await getDocs(query(
       collectionGroup(db, 'comments'),
       orderBy('publishedAt', 'desc'),
       limit(maxItems),
     ))
-    return filterAndMap(snap.docs, accountPostIds)
+    return snap.docs.filter(inRange).map(d => (d.data().text as string) ?? '').filter(Boolean)
   } catch {
     const snap = await getDocs(query(
       collectionGroup(db, 'comments'),
       limit(maxItems),
     ))
-    return filterAndMap(snap.docs, accountPostIds)
+    return snap.docs.filter(inRange).map(d => (d.data().text as string) ?? '').filter(Boolean)
   }
 }
 

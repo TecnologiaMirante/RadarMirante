@@ -171,13 +171,25 @@ export default function Dashboard() {
   }, [allPosts, displayTime, customFrom, customTo])
 
   useEffect(() => {
-    setCloudLoading(true)
-    const cutoff = TIME_MS[displayTime] ?? null
-    const sinceMs = cutoff !== null ? Date.now() - cutoff : Date.now() - 7 * 24 * 60 * 60 * 1000
-    getRecentCommentTexts(sinceMs, undefined, account)
-      .then(setCommentTexts)
-      .catch(console.error)
-      .finally(() => setCloudLoading(false))
+    const MIN_TEXTS = 5
+    const FALLBACK_PERIODS = [7 * 24 * 3600_000, 30 * 24 * 3600_000]
+    setCloudLoading(true);
+    (async () => {
+      const now = Date.now()
+      const cutoff = TIME_MS[displayTime] ?? null
+      const periodMs = cutoff !== null ? cutoff : 7 * 24 * 3600_000
+      const initial = await getRecentCommentTexts(now - periodMs, undefined, account)
+      if (initial.length >= MIN_TEXTS) { setCommentTexts(initial); return }
+      for (const ms of FALLBACK_PERIODS) {
+        if (ms <= periodMs) continue
+        const expanded = await getRecentCommentTexts(now - ms, undefined, account)
+        if (expanded.length >= MIN_TEXTS || ms === FALLBACK_PERIODS[FALLBACK_PERIODS.length - 1]) {
+          setCommentTexts(expanded)
+          return
+        }
+      }
+      setCommentTexts(initial)
+    })().catch(console.error).finally(() => setCloudLoading(false))
   }, [displayTime, account])
 
   const trendingPosts  = useMemo(() => posts.filter(p => p.status === 'trending'),   [posts])

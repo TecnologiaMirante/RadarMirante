@@ -39,11 +39,11 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ]
 
 const CLOUD_PERIODS: { value: number; label: string }[] = [
-  { value: 1  * 3600_000, label: '1h' },
-  { value: 3  * 3600_000, label: '3h' },
-  { value: 6  * 3600_000, label: '6h' },
-  { value: 12 * 3600_000, label: '12h' },
-  { value: 24 * 3600_000, label: '24h' },
+  { value:  1 * 3600_000,       label: '1h'  },
+  { value: 12 * 3600_000,       label: '12h' },
+  { value: 24 * 3600_000,       label: '24h' },
+  { value:  7 * 24 * 3600_000,  label: '7D'  },
+  { value: 30 * 24 * 3600_000,  label: '30D' },
 ]
 
 type ContentTab = 'all' | 'trending' | 'candidate' | 'analyzed'
@@ -177,7 +177,7 @@ export default function Radar() {
   const accountConfig = getAccount(account)
   const accountColor = ACCOUNT_COLORS[account]
   const pageTitle = ACCOUNT_PAGE_TITLES[account]
-  const [cloudPeriod, setCloudPeriod] = useState(CLOUD_PERIODS[4].value)
+  const [cloudPeriod, setCloudPeriod] = useState(CLOUD_PERIODS[2].value)
   const [cloudTexts, setCloudTexts] = useState<string[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
   const [cloudExpanded, setCloudExpanded] = useState(false)
@@ -202,11 +202,23 @@ export default function Radar() {
   }, [])
 
   useEffect(() => {
-    setCloudLoading(true)
-    getRecentCommentTexts(Date.now() - cloudPeriod, undefined, account)
-      .then(setCloudTexts)
-      .catch(console.error)
-      .finally(() => setCloudLoading(false))
+    const MIN_TEXTS = 5
+    const FALLBACK_PERIODS = [7 * 24 * 3600_000, 30 * 24 * 3600_000]
+    setCloudLoading(true);
+    (async () => {
+      const now = Date.now()
+      const initial = await getRecentCommentTexts(now - cloudPeriod, undefined, account)
+      if (initial.length >= MIN_TEXTS) { setCloudTexts(initial); return }
+      for (const ms of FALLBACK_PERIODS) {
+        if (ms <= cloudPeriod) continue
+        const expanded = await getRecentCommentTexts(now - ms, undefined, account)
+        if (expanded.length >= MIN_TEXTS || ms === FALLBACK_PERIODS[FALLBACK_PERIODS.length - 1]) {
+          setCloudTexts(expanded)
+          return
+        }
+      }
+      setCloudTexts(initial)
+    })().catch(console.error).finally(() => setCloudLoading(false))
   }, [cloudPeriod, account])
 
   const overrideAllLabel = useMemo(() => {
@@ -635,11 +647,13 @@ export default function Radar() {
                   </InfoTip>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5 bg-muted/40 rounded-lg p-0.5">
                     {CLOUD_PERIODS.map(({ value, label }) => (
                       <button key={value} onClick={() => setCloudPeriod(value)}
-                        className={cn('px-2.5 py-1 rounded text-xs font-medium transition-colors',
-                          cloudPeriod === value ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground')}>
+                        className={cn('px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                          cloudPeriod === value
+                            ? 'bg-background text-foreground font-semibold shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground')}>
                         {label}
                       </button>
                     ))}
@@ -665,11 +679,13 @@ export default function Radar() {
                   <MessageCircle className="w-4 h-4 text-primary" />
                   O que está sendo comentado
                 </div>
-                <div className="flex items-center gap-1 mr-6">
+                <div className="flex items-center gap-0.5 bg-muted/40 rounded-lg p-0.5 mr-6">
                   {CLOUD_PERIODS.map(({ value, label }) => (
                     <button key={value} onClick={() => setCloudPeriod(value)}
-                      className={cn('px-2.5 py-1 rounded text-xs font-medium transition-colors',
-                        cloudPeriod === value ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground')}>
+                      className={cn('px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                        cloudPeriod === value
+                          ? 'bg-background text-foreground font-semibold shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground')}>
                       {label}
                     </button>
                   ))}
