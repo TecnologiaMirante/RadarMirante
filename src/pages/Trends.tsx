@@ -47,15 +47,38 @@ function normalizeForMatch(str: string): string {
     .trim()
 }
 
+function stemPt(word: string): string {
+  return word
+    .replace(/(ções|ções)$/, 'cao')
+    .replace(/(ões)$/, 'ao')
+    .replace(/(ando|endo|indo|ando)$/, '')
+    .replace(/(ares|eres|ires|ar|er|ir)$/, '')
+    .replace(/(dores|dora|dor)$/, '')
+    .replace(/(istas|ista)$/, '')
+    .replace(/(mente)$/, '')
+    .replace(/(veis|vel)$/, '')
+    .replace(/(es|s)$/, '')
+}
+
 function topicMatchesPosts(topic: TrendTopic, posts: RadarMatch[]): RadarMatch[] {
-  const keywords = normalizeForMatch(topic.title)
+  const rawKeywords = normalizeForMatch(topic.title)
     .split(' ')
-    .filter(w => w.length >= 5 && !STOPWORDS.has(w))
-  if (keywords.length === 0) return []
+    .filter(w => w.length >= 4 && !STOPWORDS.has(w))
+  if (rawKeywords.length === 0) return []
+  const keywords = rawKeywords.map(w => stemPt(w))
   const minMatches = keywords.length >= 2 ? 2 : 1
   return posts.filter(p => {
-    const textWords = new Set(normalizeForMatch(p.text).split(/\s+/))
-    const matched = keywords.filter(w => textWords.has(w))
+    const textStems = new Set(
+      normalizeForMatch(p.text).split(/\s+/).map(w => stemPt(w))
+    )
+    const matched = keywords.filter(w => {
+      if (textStems.has(w)) return true
+      // substring match for compound words (e.g. "zanin" inside "ministrozanin")
+      for (const stem of textStems) {
+        if (stem.length >= 5 && (stem.includes(w) || w.includes(stem))) return true
+      }
+      return false
+    })
     return matched.length >= minMatches
   })
 }

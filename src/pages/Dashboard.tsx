@@ -16,6 +16,7 @@ import { MonitoringSince } from '@/components/ui/MonitoringSince'
 import { cn } from '@/lib/utils'
 import type { Timestamp } from 'firebase/firestore'
 import type { RadarPost } from '@/types/radar'
+import type { RadarAccountConfig } from '@/contexts/AccountContext'
 import { Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -130,6 +131,92 @@ function TopPostRow({ post, rank }: { post: RadarPost; rank: number }) {
         </div>
       </div>
     </Link>
+  )
+}
+
+// ─── Comparative section ─────────────────────────────────────────────────────
+
+interface AccountSummary {
+  cfg: RadarAccountConfig
+  posts: number
+  trending: number
+  comments: number
+  avgScore: number
+}
+
+function ComparisonSection({ sinceMs, displayTime }: { sinceMs: number | null; displayTime: string }) {
+  const { accounts, account: selectedAccount } = useAccount()
+  const [summaries, setSummaries] = useState<AccountSummary[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (accounts.length < 2) { setLoading(false); return }
+    setLoading(true)
+    Promise.all(
+      accounts.map(async cfg => {
+        const posts = await getPosts({ platform: 'all', time: 'all', sort: 'recent' }, cfg.id)
+        const filtered = sinceMs !== null
+          ? posts.filter(p => (p.publishedAt as unknown as Timestamp).toMillis() >= sinceMs)
+          : posts
+        const trending = filtered.filter(p => p.status === 'trending').length
+        const comments = filtered.reduce((s, p) => s + p.metrics.comments, 0)
+        const scored = filtered.filter(p => p.trendScore > 0)
+        const avgScore = scored.length ? Math.round(scored.reduce((s, p) => s + p.trendScore, 0) / scored.length) : 0
+        return { cfg, posts: filtered.length, trending, comments, avgScore }
+      })
+    )
+      .then(setSummaries)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [accounts.map(a => a.id).join(','), sinceMs])
+
+  if (accounts.length < 2) return null
+
+  const maxComments = Math.max(1, ...summaries.map(s => s.comments))
+
+  return (
+    <Card className="border-border/60">
+      <CardContent className="p-5">
+        <SectionTitle title="Comparativo de contas" sub={`· ${displayTime === 'all' ? 'total histórico' : 'no período'}`} />
+        {loading ? (
+          <div className="space-y-2 mt-3">
+            {accounts.map(a => <div key={a.id} className="h-10 rounded-lg bg-secondary animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="space-y-3 mt-3">
+            {summaries.sort((a, b) => b.comments - a.comments).map(s => (
+              <div key={s.cfg.id}
+                className={cn(
+                  'rounded-lg border px-3 py-2.5 transition-colors',
+                  s.cfg.id === selectedAccount ? 'border-primary/30 bg-primary/5' : 'border-border/40 bg-muted/10',
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.cfg.color }} />
+                  <span className="text-xs font-semibold text-foreground truncate flex-1">{s.cfg.displayName}</span>
+                  <span className="text-[10px] text-muted-foreground">{s.posts} posts</span>
+                </div>
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-1.5">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${(s.comments / maxComments) * 100}%`, backgroundColor: s.cfg.color }}
+                  />
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <span><strong className="text-foreground">{s.comments.toLocaleString('pt-BR')}</strong> comentários</span>
+                  {s.trending > 0 && (
+                    <span className="text-orange-400"><strong>{s.trending}</strong> trending</span>
+                  )}
+                  {s.avgScore > 0 && (
+                    <span className="ml-auto">score médio <strong className="text-foreground">{s.avgScore}</strong></span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -268,6 +355,12 @@ export default function Dashboard() {
 
   const timeLabel = getPresetLabel(displayTime, customFrom, customTo, overrideAllLabel)
 
+  const sinceMs = useMemo(() => {
+    if (displayTime === 'custom') return customFrom ?? null
+    const cutoff = TIME_MS[displayTime]
+    return cutoff !== null ? Date.now() - cutoff : null
+  }, [displayTime, customFrom])
+
   return (
     <div className="space-y-6">
 
@@ -372,6 +465,9 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Comparativo de contas */}
+      <ComparisonSection sinceMs={sinceMs} displayTime={timeLabel.toLowerCase()} />
 
       {/* Activity chart */}
       <Card className="border-border/60">

@@ -30,7 +30,7 @@ export function OpportunityCard({ opportunity }: OpportunityCardProps) {
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <ScoreBadge score={opportunity.trendScore} size="md" />
+            <ScoreBadge score={opportunity.trendScore} size="md" showInfo />
             <PlatformBadge platform={opportunity.platform} />
           </div>
           <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">

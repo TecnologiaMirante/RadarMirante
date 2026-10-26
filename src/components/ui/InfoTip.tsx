@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -10,12 +11,13 @@ interface InfoTipProps {
 
 export function InfoTip({ children, side = 'bottom', className }: InfoTipProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
         setOpen(false)
       }
     }
@@ -23,39 +25,61 @@ export function InfoTip({ children, side = 'bottom', className }: InfoTipProps) 
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const positionClass = {
-    bottom: 'top-full mt-1.5 left-1/2 -translate-x-1/2',
-    top:    'bottom-full mb-1.5 left-1/2 -translate-x-1/2',
-    left:   'right-full mr-1.5 top-1/2 -translate-y-1/2',
-    right:  'left-full ml-1.5 top-1/2 -translate-y-1/2',
-  }[side]
+  function handleToggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      const TIP_W = 288 // w-72
+      let top = 0
+      let left = 0
+      if (side === 'bottom') {
+        top = r.bottom + 6
+        left = r.left + r.width / 2 - TIP_W / 2
+      } else if (side === 'top') {
+        top = r.top - 6
+        left = r.left + r.width / 2 - TIP_W / 2
+      } else if (side === 'left') {
+        top = r.top + r.height / 2
+        left = r.left - TIP_W - 6
+      } else {
+        top = r.top + r.height / 2
+        left = r.right + 6
+      }
+      // clamp to viewport
+      left = Math.max(8, Math.min(left, window.innerWidth - TIP_W - 8))
+      setCoords({ top, left })
+    }
+    setOpen(v => !v)
+  }
+
+  const transformClass = side === 'top' ? '-translate-y-full' : side === 'left' || side === 'right' ? '-translate-y-1/2' : ''
 
   return (
-    <div ref={ref} className={cn('relative inline-flex', className)}>
+    <div className={cn('relative inline-flex', className)}>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggle}
         className={cn(
           'rounded-full p-0.5 transition-colors',
-          open
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground',
+          open ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
         )}
         aria-label="Mais informações"
       >
         <Info className="w-3.5 h-3.5" />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
           className={cn(
-            'absolute z-50 w-72 rounded-lg border border-border bg-popover text-popover-foreground',
+            'fixed z-[9999] w-72 rounded-lg border border-border bg-popover text-popover-foreground',
             'shadow-lg p-3 text-xs leading-relaxed',
-            positionClass,
+            transformClass,
           )}
+          style={{ top: coords.top, left: coords.left }}
         >
           {children}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

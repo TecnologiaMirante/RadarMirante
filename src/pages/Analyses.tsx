@@ -11,6 +11,7 @@ import { useTimeFilter } from '@/hooks/useTimeFilter'
 import { getOpportunities, updateOpportunityStatus } from '@/services/radar'
 import { useAccount } from '@/contexts/AccountContext'
 import { MonitoringSince } from '@/components/ui/MonitoringSince'
+import { EmptyState } from '@/components/radar/EmptyState'
 import type { Opportunity, OpportunityStatus } from '@/types/radar'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
@@ -385,19 +386,13 @@ export default function AnalysesPage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center">
-            <Sparkles className="w-7 h-7 text-muted-foreground/40" />
-          </div>
-          <div className="space-y-1.5">
-            <p className="font-bold text-foreground">Nenhuma análise</p>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              {statusFilter === 'all'
-                ? 'Nenhuma análise gerada ainda. Acesse o Radar e clique em "Analisar" em um post em tendência.'
-                : 'Nenhuma análise com esse status.'}
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={Sparkles}
+          title="Nenhuma análise"
+          description={statusFilter === 'all'
+            ? 'Nenhuma análise gerada ainda. Acesse o Radar e clique em "Analisar" em um post em tendência.'
+            : 'Nenhuma análise com esse status.'}
+        />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {filtered.map(opp => (

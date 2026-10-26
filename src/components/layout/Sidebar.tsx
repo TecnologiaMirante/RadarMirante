@@ -130,28 +130,28 @@ export function Sidebar() {
         >
           {/* Logo / Sem acesso */}
           <div className="relative flex-shrink-0">
-            {hasAccounts ? (
-              <>
-                <AccountLogo id={account} size={9} />
-                {!ACCOUNT_LOGOS[account] && (
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                    style={{ backgroundColor: color }}
-                  >
-                    {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-muted/60 border border-border/60 flex-shrink-0">
-                <Radio className="w-4 h-4 text-muted-foreground/40" />
-              </div>
-            )}
-            {/* Status dot */}
-            <span
-              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card"
-              style={{ backgroundColor: hasAccounts ? color : '#6b728040' }}
-            />
+            <div
+              className="rounded-xl p-[2px]"
+              style={hasAccounts ? { background: `linear-gradient(135deg, ${color}cc, ${color}44)` } : undefined}
+            >
+              {hasAccounts ? (
+                <>
+                  <AccountLogo id={account} size={9} />
+                  {!ACCOUNT_LOGOS[account] && (
+                    <div
+                      className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    >
+                      {(currentConfig?.shortName ?? account)[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="w-9 h-9 rounded-[10px] flex items-center justify-center bg-muted/60 border border-border/60 flex-shrink-0">
+                  <Radio className="w-4 h-4 text-muted-foreground/40" />
+                </div>
+              )}
+            </div>
           </div>
 
           {!collapsed && (

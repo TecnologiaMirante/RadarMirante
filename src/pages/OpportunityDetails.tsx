@@ -225,7 +225,7 @@ export default function OpportunityDetails() {
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <ScoreBadge score={opportunity.trendScore} size="lg" />
+          <ScoreBadge score={opportunity.trendScore} size="lg" showInfo />
           <PlatformBadge platform={opportunity.platform} />
           <span className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
             <Clock className="w-3 h-3" />

@@ -182,7 +182,6 @@ function InstagramPreview({ post, compact = false }: { post: RadarPost; compact?
               src={embedUrl}
               className={cn('block w-full border-0 bg-white', compact ? 'h-[520px]' : 'h-[560px]')}
               loading="lazy"
-              allowTransparency
             />
           </div>
         ) : (
