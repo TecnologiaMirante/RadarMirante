@@ -542,13 +542,13 @@ export default function TrendsPage() {
         ) : activeView === 'now' ? (
           /* ── Agora ── */
           <div className="space-y-1.5">
-            {topicsWithMatches.map(({ topic, radarMatches }) => (
+            {topicsWithMatches.map(({ topic, radarMatches }, i) => (
               <TrendItem
                 key={topic.id}
                 topic={topic}
                 radarMatches={radarMatches}
-                rank={topic.rank}
-                showContext={topic.rank <= 5}
+                rank={i + 1}
+                showContext={i < 5}
                 onOpenModal={(t, m) => setModal({ topic: t, matches: m })}
                 onNavigate={t => navigate(`/tendencias/${t.id}`)}
               />
@@ -563,12 +563,12 @@ export default function TrendsPage() {
                   {group.label}
                 </p>
                 <div className="space-y-1.5">
-                  {group.topics.map(({ topic, radarMatches }) => (
+                  {group.topics.map(({ topic, radarMatches }, i) => (
                     <TrendItem
                       key={topic.id}
                       topic={topic}
                       radarMatches={radarMatches}
-                      rank={topic.rank}
+                      rank={i + 1}
                       showContext={false}
                       onOpenModal={(t, m) => setModal({ topic: t, matches: m })}
                       onNavigate={t => navigate(`/tendencias/${t.id}`)}
