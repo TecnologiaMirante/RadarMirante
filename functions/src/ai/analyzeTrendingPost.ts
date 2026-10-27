@@ -70,7 +70,7 @@ export async function analyzeTrendingPost(
   const openai = getOpenAI(apiKey)
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4.1-nano',
+    model: 'gpt-4.1-mini',
     response_format: {
       type: 'json_schema',
       json_schema: {
