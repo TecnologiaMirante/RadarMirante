@@ -581,7 +581,7 @@ export default function Radar() {
               <div className="space-y-1 text-muted-foreground mb-2 border-t border-border pt-1.5">
                 <p><strong className="text-red-400">🔥 80+</strong> — Viral, pautar agora</p>
                 <p><strong className="text-orange-400">📈 65–79</strong> — Em alta, monitorar</p>
-                <p><strong className="text-yellow-400">👀 40–64</strong> — Candidato</p>
+                <p><strong className="text-yellow-400">👀 40–64</strong> — Aquecendo</p>
                 <p><strong className="text-muted-foreground">📊 0–39</strong> — Volume normal</p>
               </div>
               {periodDeltas.score !== 0 && <p className="text-muted-foreground border-t border-border pt-1.5">Variação % compara a média de score da primeira e segunda metade do período.</p>}

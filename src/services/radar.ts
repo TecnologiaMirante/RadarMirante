@@ -9,10 +9,12 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   addDoc,
   updateDoc,
   serverTimestamp,
   Timestamp,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { auth } from './firebase'
@@ -184,15 +186,31 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
 
-export async function getPostComments(postId: string, maxItems = 50): Promise<import('@/types/radar').RadarComment[]> {
-  const q = query(
-    collection(db, 'posts', postId, 'comments'),
+export interface CommentsPage {
+  comments: import('@/types/radar').RadarComment[]
+  cursor: QueryDocumentSnapshot | null
+  hasMore: boolean
+}
+
+export async function getPostComments(
+  postId: string,
+  pageSize = 50,
+  after?: QueryDocumentSnapshot | null,
+): Promise<CommentsPage> {
+  const constraints = [
     orderBy('publishedAt', 'desc'),
-    limit(maxItems),
-  )
+    limit(pageSize + 1),
+    ...(after ? [startAfter(after)] : []),
+  ]
+  const q = query(collection(db, 'posts', postId, 'comments'), ...constraints)
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as import('@/types/radar').RadarComment)
-  )
+  const hasMore = snap.docs.length > pageSize
+  const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs
+  return {
+    comments: docs.map(d => ({ id: d.id, ...d.data() } as import('@/types/radar').RadarComment)),
+    cursor: docs[docs.length - 1] ?? null,
+    hasMore,
+  }
 }
 
 export async function getRecentCommentTexts(sinceMs: number, toMs?: number, account: RadarAccount = 'imirante', maxItems = 2000): Promise<string[]> {

@@ -19,6 +19,8 @@ import {
   getPost, getPostOpportunity,
   triggerPostAnalysis, getPostComments,
 } from '@/services/radar'
+import type { CommentsPage } from '@/services/radar'
+import type { QueryDocumentSnapshot } from 'firebase/firestore'
 import type {
   RadarPost, Opportunity, RadarComment, StoryIdea,
   TopicCluster, ClaimToVerify,
@@ -405,10 +407,70 @@ function resolveDate(publishedAt: RadarComment['publishedAt']): Date | null {
   }
 }
 
-function CommentsTab({ comments, loading }: { comments: RadarComment[]; loading: boolean }) {
-  const [showAll, setShowAll] = useState(false)
-  const PAGE = 100
-  const visible = showAll ? comments : comments.slice(0, PAGE)
+function CommentRow({ c }: { c: RadarComment }) {
+  const bg = avatarColor(c.authorHash ?? c.id)
+  const initials = avatarInitials(c.authorHash ?? c.id)
+  const date = resolveDate(c.publishedAt)
+  const timeAgo = date ? formatDistanceToNow(date, { addSuffix: true, locale: ptBR }) : null
+  return (
+    <div className="flex gap-3 py-3 px-1">
+      <div
+        className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white mt-0.5"
+        style={{ backgroundColor: bg }}
+      >
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-foreground leading-relaxed">{c.text}</p>
+        <div className="flex items-center gap-2.5 mt-1">
+          {timeAgo && <span className="text-[11px] text-muted-foreground/50">{timeAgo}</span>}
+          {c.likeCount != null && c.likeCount > 0 && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground/50">
+              <Heart className="w-3 h-3" />{c.likeCount}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CommentsTab({ postId, totalCount }: { postId: string; totalCount: number }) {
+  const PAGE = 50
+  const [comments, setComments] = useState<RadarComment[]>([])
+  const [cursor, setCursor] = useState<QueryDocumentSnapshot | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    setComments([])
+    setCursor(null)
+    getPostComments(postId, PAGE)
+      .then((page: CommentsPage) => {
+        setComments(page.comments)
+        setCursor(page.cursor)
+        setHasMore(page.hasMore)
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [postId])
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const page: CommentsPage = await getPostComments(postId, PAGE, cursor)
+      setComments(prev => [...prev, ...page.comments])
+      setCursor(page.cursor)
+      setHasMore(page.hasMore)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -438,56 +500,22 @@ function CommentsTab({ comments, loading }: { comments: RadarComment[]; loading:
   return (
     <div>
       <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest px-1 pb-2">
-        {comments.length} comentário{comments.length !== 1 ? 's' : ''}
+        {comments.length}{hasMore ? '+' : ''} comentário{comments.length !== 1 ? 's' : ''} carregado{comments.length !== 1 ? 's' : ''}{totalCount > comments.length && !hasMore ? '' : totalCount > 0 ? ` · ${totalCount.toLocaleString('pt-BR')} no total` : ''}
       </p>
 
       <div className="divide-y divide-border/40">
-        {visible.map((c) => {
-          const bg = avatarColor(c.authorHash ?? c.id)
-          const initials = avatarInitials(c.authorHash ?? c.id)
-          const date = resolveDate(c.publishedAt)
-          const timeAgo = date
-            ? formatDistanceToNow(date, { addSuffix: true, locale: ptBR })
-            : null
-
-          return (
-            <div key={c.id} className="flex gap-3 py-3 px-1 group">
-              {/* Avatar */}
-              <div
-                className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white mt-0.5"
-                style={{ backgroundColor: bg }}
-              >
-                {initials}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground leading-relaxed">{c.text}</p>
-                <div className="flex items-center gap-2.5 mt-1">
-                  {timeAgo && (
-                    <span className="text-[11px] text-muted-foreground/50">{timeAgo}</span>
-                  )}
-                  {c.likeCount != null && c.likeCount > 0 && (
-                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground/50">
-                      <Heart className="w-3 h-3" />
-                      {c.likeCount}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        {comments.map(c => <CommentRow key={c.id} c={c} />)}
       </div>
 
-      {comments.length > PAGE && (
+      {hasMore && (
         <button
-          onClick={() => setShowAll(v => !v)}
-          className="w-full mt-2 text-xs text-muted-foreground hover:text-foreground py-2.5 flex items-center justify-center gap-1.5 transition-colors border-t border-border/40"
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="w-full mt-2 text-xs text-muted-foreground hover:text-foreground py-2.5 flex items-center justify-center gap-1.5 transition-colors border-t border-border/40 disabled:opacity-50"
         >
-          {showAll
-            ? <><ChevronUp className="w-3.5 h-3.5" /> Mostrar menos</>
-            : <><ChevronDown className="w-3.5 h-3.5" /> Ver mais {comments.length - PAGE} comentários</>}
+          {loadingMore
+            ? <><span className="w-3 h-3 rounded-full border border-current border-t-transparent animate-spin" /> Carregando…</>
+            : <><ChevronDown className="w-3.5 h-3.5" /> Carregar mais comentários</>}
         </button>
       )}
     </div>
@@ -935,9 +963,7 @@ export default function PostDetails() {
 
   const [post, setPost] = useState<RadarPost | null>(null)
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null)
-  const [comments, setComments] = useState<RadarComment[]>([])
   const [loading, setLoading] = useState(true)
-  const [commentsLoading, setCommentsLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   const [tab, setTab]     = useState<Tab>('analysis')
@@ -956,11 +982,6 @@ export default function PostDetails() {
       .then(([p, o]) => { setPost(p); setOpportunity(o) })
       .catch(console.error)
       .finally(() => setLoading(false))
-
-    getPostComments(postId, 200)
-      .then(setComments)
-      .catch(console.error)
-      .finally(() => setCommentsLoading(false))
   }, [postId])
 
   async function handleAnalyze() {
@@ -1072,15 +1093,15 @@ export default function PostDetails() {
             >
               <MessageCircle className="w-4 h-4" />
               Comentários
-              {comments.length > 0 && (
-                <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{comments.length}</span>
+              {post && post.metrics.comments > 0 && (
+                <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-full">{post.metrics.comments.toLocaleString('pt-BR')}</span>
               )}
             </button>
           </div>
 
           <div className="pb-10">
-            {tab === 'comments' && (
-              <CommentsTab comments={comments} loading={commentsLoading} />
+            {tab === 'comments' && postId && (
+              <CommentsTab postId={postId} totalCount={post?.metrics.comments ?? 0} />
             )}
             {tab === 'analysis' && (
               <AnalysisTab

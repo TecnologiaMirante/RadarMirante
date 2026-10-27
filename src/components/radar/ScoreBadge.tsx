@@ -56,7 +56,7 @@ export function ScoreBadge({ score, size = 'md', showInfo = false, className }: 
         <div className="space-y-1 mb-2">
           <p><strong className="text-foreground">🔥 80+</strong> — Viral. Alta prioridade editorial.</p>
           <p><strong className="text-foreground">📈 65–79</strong> — Em alta. Monitorar de perto.</p>
-          <p><strong className="text-foreground">👀 40–64</strong> — Candidato. Crescimento acima do normal.</p>
+          <p><strong className="text-foreground">👀 40–64</strong> — Aquecendo. Crescimento acima do normal.</p>
           <p><strong className="text-foreground">📊 0–39</strong> — Monitorando. Volume baixo.</p>
         </div>
         <p className="text-muted-foreground border-t border-border pt-1.5 mt-1.5">

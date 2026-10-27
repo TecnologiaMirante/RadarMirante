@@ -3,6 +3,10 @@ import {
   Activity, MessageCircle, Heart, TrendingUp, FileText,
   Zap, BarChart2, Award, Clock, ArrowUpRight,
 } from 'lucide-react'
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip as RechartTooltip,
+  ResponsiveContainer, CartesianGrid, ReferenceLine,
+} from 'recharts'
 import { Card, CardContent } from '@/components/ui/card'
 import { WordCloud } from '@/components/radar/WordCloud'
 import { ActivityChart } from '@/components/radar/ActivityChart'
@@ -131,6 +135,149 @@ function TopPostRow({ post, rank }: { post: RadarPost; rank: number }) {
         </div>
       </div>
     </Link>
+  )
+}
+
+// ─── Score evolution chart ────────────────────────────────────────────────────
+
+interface ScoreSlot {
+  label: string
+  avg: number
+  max: number
+  count: number
+}
+
+function buildScoreSlots(posts: RadarPost[], displayTime: string): ScoreSlot[] {
+  const scored = posts.filter(p => p.trendScore > 0)
+  if (scored.length === 0) return []
+
+  const isShortPeriod = ['now', '3h', '6h'].includes(displayTime)
+
+  // Group by hour for short periods, by day otherwise
+  const map = new Map<string, { sum: number; max: number; count: number }>()
+  scored.forEach(p => {
+    const d = (p.publishedAt as unknown as Timestamp).toDate()
+    let key: string
+    if (isShortPeriod) {
+      key = `${String(d.getHours()).padStart(2, '0')}h`
+    } else {
+      key = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    const cur = map.get(key) ?? { sum: 0, max: 0, count: 0 }
+    cur.sum += p.trendScore
+    cur.max = Math.max(cur.max, p.trendScore)
+    cur.count++
+    map.set(key, cur)
+  })
+
+  return Array.from(map.entries())
+    .map(([label, v]) => ({ label, avg: Math.round(v.sum / v.count), max: v.max, count: v.count }))
+    .slice(-30) // max 30 pontos
+}
+
+function ScoreTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; payload: ScoreSlot }>; label?: string }) {
+  if (!active || !payload?.length) return null
+  const { avg, max, count } = payload[0].payload
+  const zone = avg >= 65 ? { label: 'Trending 🔥', color: '#ef4444' } : avg >= 40 ? { label: 'Aquecendo ⚡', color: 'hsl(var(--primary))' } : { label: 'Baixo engajamento', color: '#6b7280' }
+  return (
+    <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-xs space-y-1.5" style={{ minWidth: 160 }}>
+      <p className="font-semibold text-foreground">{label}</p>
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-muted-foreground">Score médio</span>
+        <span className="font-bold text-foreground">{avg}</span>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-muted-foreground">Score máximo</span>
+        <span className="font-medium text-foreground">{max}</span>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-muted-foreground">Posts</span>
+        <span className="text-foreground">{count}</span>
+      </div>
+      <div className="pt-1 border-t border-border/50 flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: zone.color }} />
+        <span style={{ color: zone.color }}>{zone.label}</span>
+      </div>
+    </div>
+  )
+}
+
+function ScoreEvolutionChart({ posts, loading, displayTime }: { posts: RadarPost[]; loading: boolean; displayTime: string }) {
+  const slots = useMemo(() => buildScoreSlots(posts, displayTime), [posts, displayTime])
+
+  if (loading) {
+    return <div className="h-[220px] bg-muted/30 rounded-lg animate-pulse" />
+  }
+  if (slots.length < 2) {
+    return (
+      <div className="h-[220px] flex flex-col items-center justify-center gap-2">
+        <p className="text-xs text-muted-foreground/50">Dados insuficientes para o período.</p>
+        <p className="text-[10px] text-muted-foreground/30">Tente um intervalo maior</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Zone legend */}
+      <div className="flex items-center gap-4 text-[10px]">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-red-400" />
+          <span className="text-muted-foreground">Trending <span className="text-red-400 font-semibold">≥65</span></span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-primary" />
+          <span className="text-muted-foreground">Aquecendo <span className="text-primary font-semibold">40–64</span></span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/40" />
+          <span className="text-muted-foreground">Baixo <span className="font-semibold">&lt;40</span></span>
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <AreaChart data={slots} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+          <defs>
+            <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.03} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.35} vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            domain={[0, 100]}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={false}
+            ticks={[0, 40, 65, 100]}
+          />
+          <RechartTooltip content={<ScoreTooltip />} />
+          {/* Zone fill — trending */}
+          <ReferenceLine y={65} stroke="#ef4444" strokeDasharray="5 4" opacity={0.5}
+            label={{ value: 'trending', position: 'insideTopRight', fontSize: 9, fill: '#ef444488', dy: -4 }}
+          />
+          {/* Zone fill — candidate */}
+          <ReferenceLine y={40} stroke="hsl(var(--primary))" strokeDasharray="5 4" opacity={0.4}
+            label={{ value: 'aquecendo', position: 'insideTopRight', fontSize: 9, fill: 'hsl(var(--primary) / 0.6)', dy: -4 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="avg"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2.5}
+            fill="url(#scoreGrad)"
+            dot={false}
+            activeDot={{ r: 5, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: 'hsl(var(--background))' }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -429,7 +576,7 @@ export default function Dashboard() {
             <div className="space-y-1 text-muted-foreground">
               <p><strong className="text-red-400">🔥 80+</strong> — Viral, pautar agora</p>
               <p><strong className="text-orange-400">📈 65–79</strong> — Em alta, monitorar</p>
-              <p><strong className="text-yellow-400">👀 40–64</strong> — Candidato</p>
+              <p><strong className="text-yellow-400">👀 40–64</strong> — Aquecendo</p>
               <p><strong className="text-muted-foreground">📊 0–39</strong> — Volume normal</p>
             </div>
           </>} />
@@ -474,6 +621,16 @@ export default function Dashboard() {
         <CardContent className="p-5">
           <SectionTitle title="Publicações no período" sub={`· ${timeLabel.toLowerCase()}`} />
           <ActivityChart posts={posts} loading={loading} timeFilter={displayTime} />
+        </CardContent>
+      </Card>
+
+      {/* Score evolution */}
+      <Card className="border-border/60">
+        <CardContent className="p-5">
+          <SectionTitle title="Evolução do score médio" sub="· score médio dos posts publicados por dia" />
+          <div className="mt-4">
+            <ScoreEvolutionChart posts={posts} loading={loading} displayTime={displayTime} />
+          </div>
         </CardContent>
       </Card>
 

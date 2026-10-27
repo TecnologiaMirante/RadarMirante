@@ -17,12 +17,15 @@ export function InfoTip({ children, side = 'bottom', className }: InfoTipProps) 
   useEffect(() => {
     if (!open) return
     function handleClick(e: MouseEvent) {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
     }
+    function handleScroll() { setOpen(false) }
     document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
   }, [open])
 
   function handleToggle() {
